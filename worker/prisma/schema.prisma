@@ -1,0 +1,79 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String      @id @default(uuid())
+  email       String      @unique
+  password    String
+  subscription String     @default("FREE") // e.g., FREE, PRO, BIZ
+  accounts    IGAccount[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+enum AccountStatus {
+  WARM_UP
+  ACTIVE
+  BANNED
+  CHECKPOINT
+}
+
+model IGAccount {
+  id              String        @id @default(uuid())
+  username        String        @unique
+  password        String
+  sessionCookies  Json?         // Store as JSON
+  status          AccountStatus @default(WARM_UP)
+  
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  
+  proxy           Proxy?        // One-to-one relation
+  posts           Post[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Proxy {
+  id          String    @id @default(uuid())
+  host        String
+  port        Int
+  username    String?
+  password    String?
+  
+  accountId   String    @unique
+  account     IGAccount @relation(fields: [accountId], references: [id])
+}
+
+enum PostStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+model Post {
+  id            String      @id @default(uuid())
+  videoUrl      String
+  caption       String?
+  scheduleDate  DateTime
+  status        PostStatus  @default(PENDING)
+  
+  accountId     String
+  account       IGAccount   @relation(fields: [accountId], references: [id])
+  createdAt     DateTime    @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  message   String
+  timestamp DateTime @default(now())
+}
