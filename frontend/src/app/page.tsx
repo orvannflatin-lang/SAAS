@@ -91,25 +91,35 @@ export default function Dashboard() {
     const handleAddAccount = async (e: React.FormEvent) => {
         e.preventDefault();
         const url = platform === 'TWITTER' ? 'http://localhost:4000/api/twitter-accounts' : 'http://localhost:4000/api/accounts';
-        await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                username: newAcc.username,
-                password: newAcc.password,
-                email: newAcc.email,
-                type: newAcc.type,
-                proxy: newAcc.proxyHost ? { 
-                    host: newAcc.proxyHost, 
-                    port: newAcc.proxyPort,
-                    username: newAcc.proxyUsername,
-                    password: newAcc.proxyPassword
-                } : undefined
-            })
-        });
-        setShowAddModal(false);
-        setNewAcc({ username: '', password: '', email: '', proxyHost: '', proxyPort: '', proxyUsername: '', proxyPassword: '', type: 'MAIN' });
-        fetchAccounts(platform);
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: newAcc.username,
+                    password: newAcc.password,
+                    email: newAcc.email,
+                    type: newAcc.type,
+                    proxy: newAcc.proxyHost ? { 
+                        host: newAcc.proxyHost, 
+                        port: parseInt(newAcc.proxyPort),
+                        username: newAcc.proxyUsername,
+                        password: newAcc.proxyPassword
+                    } : undefined
+                })
+            });
+            
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'Failed to deploy instance');
+            }
+            
+            setShowAddModal(false);
+            setNewAcc({ username: '', password: '', email: '', proxyHost: '', proxyPort: '', proxyUsername: '', proxyPassword: '', type: 'MAIN' });
+            fetchAccounts(platform);
+        } catch (error: any) {
+            alert(`Erreur: ${error.message}`);
+        }
     };
 
     const launchAction = async (id: string, action: string) => {

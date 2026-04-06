@@ -8,9 +8,9 @@ services:
     container_name: saas-frontend
     ports:
       - "3000:3000"
-    # volumes:
-    #   - ./frontend:/app
-    #   - /app/node_modules
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     environment:
       - NODE_ENV=development
       - NEXT_PUBLIC_API_URL=http://localhost:4000
@@ -24,9 +24,9 @@ services:
     container_name: saas-backend
     ports:
       - "4000:4000"
-    # volumes:
-    #   - ./backend:/app
-    #   - /app/node_modules
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
     environment:
       - NODE_ENV=development
       - PORT=4000
@@ -41,9 +41,9 @@ services:
       context: ./worker
       dockerfile: Dockerfile
     container_name: saas-worker
-    # volumes:
-    #   - ./worker:/app
-    #   - /app/node_modules
+    volumes:
+      - ./worker:/app
+      - /app/node_modules
     environment:
       - NODE_ENV=development
       - DATABASE_URL=postgresql://user:password@db:5432/saas_db

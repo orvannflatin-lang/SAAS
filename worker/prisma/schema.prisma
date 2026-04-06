@@ -16,6 +16,7 @@ model User {
   password    String
   subscription String     @default("FREE") // e.g., FREE, PRO, BIZ
   accounts    IGAccount[]
+  twitterAccounts TwitterAccount[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
@@ -76,4 +77,49 @@ model ActivityLog {
   id        String   @id @default(uuid())
   message   String
   timestamp DateTime @default(now())
+}
+
+model TwitterAccount {
+  id              String        @id @default(uuid())
+  username        String        @unique
+  password        String
+  email           String?
+  emailPassword   String?
+  sessionCookies  Json?         // Store as JSON
+  status          AccountStatus @default(WARM_UP)
+  type            String        @default("MAIN") // MAIN or SUPPORT
+  
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  
+  proxy           TwitterProxy?        // One-to-one relation
+  posts           TwitterPost[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model TwitterProxy {
+  id          String    @id @default(uuid())
+  host        String
+  port        Int
+  username    String?
+  password    String?
+  
+  accountId   String    @unique
+  account     TwitterAccount @relation(fields: [accountId], references: [id])
+}
+
+model TwitterPost {
+  id            String      @id @default(uuid())
+  content       String?
+  mediaUrls     String[]    // Array of image URLs
+  scheduleDate  DateTime
+  communityName String?     // The name or ID of the community
+  isComment     Boolean     @default(false)
+  parentPostUrl String?     // If comment, the URL of the post to comment on
+  status        PostStatus  @default(PENDING)
+  
+  accountId     String
+  account       TwitterAccount @relation(fields: [accountId], references: [id])
+  createdAt     DateTime    @default(now())
 }

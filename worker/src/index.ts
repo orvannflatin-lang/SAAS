@@ -91,7 +91,7 @@ const worker = new Worker(
         } : undefined;
 
         const browser = await chromium.launch({
-            headless: false, // Visible for tracking
+            headless: true, // Required for Docker without X11
             proxy: proxyConfig,
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });

@@ -198,6 +198,20 @@ io.on('connection', (socket) => {
     socket.on('worker_state', (data) => io.emit('ui_state', data));
 });
 
-httpServer.listen(port, () => {
-    console.log(`Backend API & Queue running on http://localhost:${port}`);
-});
+async function init() {
+    await prisma.user.upsert({
+        where: { id: 'temp-user-id' },
+        update: {},
+        create: {
+            id: 'temp-user-id',
+            email: 'admin@duupflow.com',
+            password: 'password'
+        }
+    });
+    
+    httpServer.listen(port, () => {
+        console.log(`Backend API & Queue running on http://localhost:${port}`);
+    });
+}
+
+init().catch(console.error);
