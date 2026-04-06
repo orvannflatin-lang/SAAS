@@ -13,7 +13,7 @@ const prisma = new PrismaClient();
 const socket = io(process.env.BACKEND_SOCKET_URL || 'http://saas-backend:4000');
 chromium.use(stealth());
 
-const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://redis:6379', {
+const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
     maxRetriesPerRequest: null,
 });
 
@@ -150,3 +150,21 @@ const twitterWorker = new Worker(
     twitterWorkerHandler,
     { connection: redisConnection }
 );
+
+twitterWorker.on('ready', () => {
+    console.log('✅ Twitter Worker is successfully connected to Redis and ready for jobs!');
+});
+
+twitterWorker.on('active', (job) => {
+    console.log(`🚀 Job ${job.id} started. Action: ${job.data.action}`);
+});
+
+twitterWorker.on('completed', (job) => {
+    console.log(`🏁 Job ${job.id} finished successfully.`);
+});
+
+twitterWorker.on('failed', (job, err) => {
+    console.error(`❌ Job ${job?.id} failed with error:`, err.message);
+});
+
+console.log('Worker Booted! Waiting for jobs...');

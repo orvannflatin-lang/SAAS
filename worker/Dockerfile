@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     libcairo2 \
     libasound2 \
     ffmpeg \
+    xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -47,7 +47,7 @@ export default function Dashboard() {
     const [newAcc, setNewAcc] = useState({ 
         username: '', password: '', email: '', 
         proxyHost: '', proxyPort: '', proxyUsername: '', proxyPassword: '', 
-        type: 'MAIN' 
+        type: 'MAIN', authToken: '' 
     });
 
     useEffect(() => {
@@ -100,6 +100,7 @@ export default function Dashboard() {
                     password: newAcc.password,
                     email: newAcc.email,
                     type: newAcc.type,
+                    authToken: newAcc.authToken || undefined,
                     proxy: newAcc.proxyHost ? { 
                         host: newAcc.proxyHost, 
                         port: parseInt(newAcc.proxyPort),
@@ -115,7 +116,7 @@ export default function Dashboard() {
             }
             
             setShowAddModal(false);
-            setNewAcc({ username: '', password: '', email: '', proxyHost: '', proxyPort: '', proxyUsername: '', proxyPassword: '', type: 'MAIN' });
+            setNewAcc({ username: '', password: '', email: '', proxyHost: '', proxyPort: '', proxyUsername: '', proxyPassword: '', type: 'MAIN', authToken: '' });
             fetchAccounts(platform);
         } catch (error: any) {
             alert(`Erreur: ${error.message}`);
@@ -584,23 +585,28 @@ export default function Dashboard() {
                                 </div>
 
                                 {platform === 'TWITTER' && (
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <Input label="Email Outlook" type="email" value={newAcc.email} onChange={(v: string) => setNewAcc({ ...newAcc, email: v })} />
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Account Role</label>
-                                            <div className="relative">
-                                                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30"><Briefcase size={16} /></div>
-                                                <select 
-                                                    value={newAcc.type} 
-                                                    onChange={(e) => setNewAcc({...newAcc, type: e.target.value})}
-                                                    className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none pl-10 pr-4 py-3 rounded-xl text-sm transition-all text-white/90 focus:bg-white/[0.02] appearance-none"
-                                                >
-                                                    <option value="MAIN">MAIN (Model)</option>
-                                                    <option value="SUPPORT">SUPPORT (Spammer)</option>
-                                                </select>
+                                    <>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <Input label="Email Outlook" type="email" value={newAcc.email} onChange={(v: string) => setNewAcc({ ...newAcc, email: v })} />
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Account Role</label>
+                                                <div className="relative">
+                                                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30"><Briefcase size={16} /></div>
+                                                    <select 
+                                                        value={newAcc.type} 
+                                                        onChange={(e) => setNewAcc({...newAcc, type: e.target.value})}
+                                                        className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none pl-10 pr-4 py-3 rounded-xl text-sm transition-all text-white/90 focus:bg-white/[0.02] appearance-none"
+                                                    >
+                                                        <option value="MAIN">MAIN (Model)</option>
+                                                        <option value="SUPPORT">SUPPORT (Spammer)</option>
+                                                    </select>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
+                                        <div className="p-4 bg-violet-500/10 border border-violet-500/20 rounded-2xl mb-4">
+                                            <Input label="Auth Token (Cookie) - OVERRIDES LOGIN" value={newAcc.authToken} onChange={(v: string) => setNewAcc({ ...newAcc, authToken: v })} placeholder="e.g. 1a2b3c4d5e... (Optional but recommended)" />
+                                        </div>
+                                    </>
                                 )}
                                 
                                 <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl space-y-4">

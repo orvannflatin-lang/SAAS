@@ -14,7 +14,7 @@ const prisma = new PrismaClient();
 const port = process.env.PORT || 4000;
 
 // Redis Connection for Queue
-const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://redis:6379', {
+const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
     maxRetriesPerRequest: null,
 });
 
@@ -126,10 +126,28 @@ app.get('/api/twitter-accounts', async (req, res) => {
 });
 
 /**
- * Add a new Twitter account + proxy
+ * Add a new Twitter account + proxy WITH authToken support
  */
 app.post('/api/twitter-accounts', async (req, res) => {
-    const { username, password, email, emailPassword, type, proxy } = req.body;
+    const { username, password, email, emailPassword, type, proxy, authToken } = req.body;
+
+    let sessionCookies = undefined;
+    let initialStatus = 'WARM_UP';
+
+    if (authToken && authToken.trim() !== '') {
+        sessionCookies = [
+            {
+                name: 'auth_token',
+                value: authToken.trim(),
+                domain: '.x.com',
+                path: '/',
+                secure: true,
+                httpOnly: true,
+                sameSite: 'Lax'
+            }
+        ];
+        initialStatus = 'ACTIVE';
+    }
 
     try {
         const newAccount = await prisma.twitterAccount.create({
@@ -139,6 +157,8 @@ app.post('/api/twitter-accounts', async (req, res) => {
                 email,
                 emailPassword,
                 type: type || 'MAIN',
+                status: initialStatus as any,
+                sessionCookies: sessionCookies as any,
                 userId: 'temp-user-id', // Simplified for now
                 proxy: proxy ? {
                     create: {
@@ -215,3 +235,5 @@ async function init() {
 }
 
 init().catch(console.error);
+
+// Trigger reload for .env
