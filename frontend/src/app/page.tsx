@@ -18,7 +18,20 @@ import {
     RefreshCw,
     Shield,
     Briefcase,
-    Trash2
+    Trash2,
+    HelpCircle,
+    Cookie,
+    ExternalLink,
+    BarChart3,
+    Calendar,
+    Send,
+    TrendingUp,
+    Heart,
+    MessageCircle,
+    Repeat,
+    Eye,
+    UserPlus,
+    Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -39,9 +52,17 @@ export default function Dashboard() {
     const [logs, setLogs] = useState<{ username: string, message: string, timestamp?: Date }[]>([]);
     const [screenshots, setScreenshots] = useState<Record<string, string>>({});
     const [activeAccount, setActiveAccount] = useState('');
-    const [viewMode, setViewMode] = useState<'SINGLE' | 'GRID' | 'PROXIES' | 'ACCOUNTS'>('SINGLE');
+    const [viewMode, setViewMode] = useState<'SINGLE' | 'GRID' | 'PROXIES' | 'ACCOUNTS' | 'POSTS' | 'STATS'>('SINGLE');
     const [platform, setPlatform] = useState<'INSTAGRAM' | 'TWITTER'>('INSTAGRAM');
     const [showAddModal, setShowAddModal] = useState(false);
+    const [showTokenGuide, setShowTokenGuide] = useState(false);
+    const [mounted, setMounted] = useState(false);
+
+    // Posts & Stats State
+    const [posts, setPosts] = useState<any[]>([]);
+    const [stats, setStats] = useState<any>(null);
+    const [showPostModal, setShowPostModal] = useState(false);
+    const [newPost, setNewPost] = useState({ content: '', scheduleDate: '', scheduleTime: '' });
 
     // New Account Form State
     const [newAcc, setNewAcc] = useState({ 
@@ -51,6 +72,7 @@ export default function Dashboard() {
     });
 
     useEffect(() => {
+        setMounted(true);
         const savedPlatform = localStorage.getItem('nexus_platform') as 'INSTAGRAM' | 'TWITTER';
         if (savedPlatform && (savedPlatform === 'INSTAGRAM' || savedPlatform === 'TWITTER')) {
             setPlatform(savedPlatform);
@@ -58,24 +80,102 @@ export default function Dashboard() {
     }, []);
 
     useEffect(() => {
+        if (!mounted) return; // Don't run until mounted
         localStorage.setItem('nexus_platform', platform);
         fetchAccounts(platform);
-    }, [platform]);
+    }, [platform, mounted]);
 
     useEffect(() => {
-        const socket = io('http://localhost:4000');
+        const socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000');
+        
         socket.on('ui_log', (data) => setLogs((prev) => [
             {...data, timestamp: new Date()}, 
             ...prev
         ].slice(0, 100)));
-        socket.on('ui_screenshot', (data) => setScreenshots((prev) => ({ ...prev, [data.username]: `data:image/jpeg;base64,${data.image}` })));
-        return () => { socket.disconnect(); };
-    }, []);
+        
+        socket.on('ui_screenshot', (data) => setScreenshots((prev) => ({ 
+            ...prev, 
+            [data.username]: `data:image/jpeg;base64,${data.image}` 
+        })));
+
+        socket.on('ui_state', (data) => {
+            setAccounts((prev) => prev.map(acc => 
+                acc.username === data.username ? { ...acc, status: data.state } : acc
+            ));
+        });
+
+        // Intervalle de rafraîchissement des comptes pour plus de robustesse
+        const interval = setInterval(() => {
+            fetchAccounts(platform);
+        }, 5000);
+
+        return () => { 
+            socket.disconnect(); 
+            clearInterval(interval);
+        };
+    }, [platform]);
+
+    // Posts & Stats Functions
+    const fetchPosts = async (accountId: string) => {
+        try {
+            const res = await fetch(`http://localhost:4000/api/twitter-posts/${accountId}`);
+            const data = await res.json();
+            setPosts(data);
+        } catch (err) {
+            console.error('Failed to fetch posts:', err);
+        }
+    };
+
+    const fetchStats = async (accountId: string, days: number = 30) => {
+        try {
+            const res = await fetch(`http://localhost:4000/api/twitter-stats/${accountId}?days=${days}`);
+            const data = await res.json();
+            setStats(data);
+        } catch (err) {
+            console.error('Failed to fetch stats:', err);
+        }
+    };
+
+    const handleCreatePost = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!activeAccount || !newPost.content) return;
+
+        const account = accounts.find(a => a.id === activeAccount);
+        if (!account) return;
+
+        const scheduleDate = newPost.scheduleDate && newPost.scheduleTime
+            ? `${newPost.scheduleDate}T${newPost.scheduleTime}:00Z`
+            : undefined;
+
+        try {
+            const res = await fetch('http://localhost:4000/api/twitter-posts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    accountId: account.id,
+                    content: newPost.content,
+                    scheduleDate
+                })
+            });
+
+            if (res.ok) {
+                setNewPost({ content: '', scheduleDate: '', scheduleTime: '' });
+                setShowPostModal(false);
+                fetchPosts(account.id);
+                alert('✅ Post créé avec succès!');
+            }
+        } catch (err) {
+            alert('❌ Erreur lors de la création du post');
+        }
+    };
 
     const fetchAccounts = async (p: string) => {
         try {
             const url = p === 'TWITTER' ? 'http://localhost:4000/api/twitter-accounts' : 'http://localhost:4000/api/accounts';
             const res = await fetch(url);
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
             const data = await res.json();
             setAccounts(data);
             if (data.length > 0) {
@@ -125,17 +225,35 @@ export default function Dashboard() {
 
     const launchAction = async (id: string, action: string) => {
         const url = platform === 'TWITTER' ? `http://localhost:4000/api/twitter-accounts/${id}/action` : `http://localhost:4000/api/accounts/${id}/action`;
-        await fetch(url, {
+        const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action })
         });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+            alert(`Action failed: ${err.error || 'Unknown error'}`);
+            return;
+        }
+
+        // Refresh posts and stats if Twitter
+        if (platform === 'TWITTER') {
+            setTimeout(() => {
+                fetchPosts(id);
+                fetchStats(id);
+            }, 2000);
+        }
     };
 
     const handleDeleteAccount = async (id: string) => {
         if (!confirm("Voulez-vous vraiment détruire ce nœud de la base de données ?")) return;
         const url = platform === 'TWITTER' ? `http://localhost:4000/api/twitter-accounts/${id}` : `http://localhost:4000/api/accounts/${id}`;
-        await fetch(url, { method: 'DELETE' });
+        const response = await fetch(url, { method: 'DELETE' });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+            alert(`Delete failed: ${err.error || 'Unknown error'}`);
+            return;
+        }
         
         // Refresh UI
         if (activeAccount && accounts.find(a => a.id === id)?.username === activeAccount) setActiveAccount('');
@@ -147,8 +265,12 @@ export default function Dashboard() {
     return (
         <div className="flex h-screen bg-[#030303] text-white font-sans selection:bg-violet-500/30 overflow-hidden font-light">
             {/* Ambient Background Glows */}
-            <div className={`absolute top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] pointer-events-none transition-colors duration-1000 ${platform === 'TWITTER' ? 'bg-blue-600/10' : 'bg-fuchsia-600/10'}`} />
-            <div className={`absolute bottom-0 left-0 w-[600px] h-[600px] rounded-full blur-[150px] pointer-events-none transition-colors duration-1000 ${platform === 'TWITTER' ? 'bg-cyan-900/10' : 'bg-indigo-900/10'}`} />
+            {!mounted ? null : (
+                <>
+                    <div className={`absolute top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] pointer-events-none transition-colors duration-1000 ${platform === 'TWITTER' ? 'bg-blue-600/10' : 'bg-fuchsia-600/10'}`} />
+                    <div className={`absolute bottom-0 left-0 w-[600px] h-[600px] rounded-full blur-[150px] pointer-events-none transition-colors duration-1000 ${platform === 'TWITTER' ? 'bg-cyan-900/10' : 'bg-indigo-900/10'}`} />
+                </>
+            )}
 
             {/* Sidebar */}
             <aside className="w-20 lg:w-24 border-r border-white/5 flex flex-col items-center py-8 gap-8 bg-black/40 backdrop-blur-xl z-50">
@@ -182,6 +304,14 @@ export default function Dashboard() {
                     <SidebarIcon icon={<Server size={22} />} active={viewMode === 'PROXIES'} onClick={() => setViewMode('PROXIES')} title="Proxy Matrix" />
                     <SidebarIcon icon={<Users size={22} />} active={viewMode === 'ACCOUNTS'} onClick={() => setViewMode('ACCOUNTS')} title="Global Accounts" />
                     
+                    {platform === 'TWITTER' && (
+                        <>
+                            <div className="w-8 h-[1px] bg-white/10 my-2" />
+                            <SidebarIcon icon={<Calendar size={22} />} active={viewMode === 'POSTS'} onClick={() => { setViewMode('POSTS'); if (activeAccount) fetchPosts(activeAccount); }} title="Scheduled Posts" />
+                            <SidebarIcon icon={<BarChart3 size={22} />} active={viewMode === 'STATS'} onClick={() => { setViewMode('STATS'); if (activeAccount) fetchStats(activeAccount); }} title="Statistics" />
+                        </>
+                    )}
+                    
                     <div className="w-8 h-[1px] bg-white/10 my-2" />
 
                     <motion.button 
@@ -204,9 +334,9 @@ export default function Dashboard() {
                     <div>
                         <h2 className="text-2xl font-semibold tracking-tight flex items-center gap-3">
                             {platform === 'TWITTER' ? (
-                                <span key="twitter-title" className="flex items-center gap-3"><Twitter className="text-blue-400" /> Duupflow <span className="font-light text-blue-400">X-Automation</span></span>
+                                <span className="flex items-center gap-3"><Twitter className="text-blue-400" /> Duupflow <span className="font-light text-blue-400">X-Automation</span></span>
                             ) : (
-                                <span key="insta-title" className="flex items-center gap-3"><Instagram className="text-pink-500" /> Duupflow <span className="font-light text-pink-500">Insta-Bot</span></span>
+                                <span className="flex items-center gap-3"><Instagram className="text-pink-500" /> Duupflow <span className="font-light text-pink-500">Insta-Bot</span></span>
                             )}
                         </h2>
                         <p className="text-xs text-white/40 mt-1 flex items-center gap-2 uppercase tracking-widest">
@@ -544,6 +674,158 @@ export default function Dashboard() {
                             </div>
                         </motion.div>
                     )}
+
+                    {/* POSTS SECTION */}
+                    {!mounted ? null : (
+                        viewMode === 'POSTS' && (
+                            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="max-w-[1400px] mx-auto space-y-6">
+                            <div className="flex items-center justify-between mb-8">
+                                <div className="flex items-center gap-3">
+                                    <Calendar className="text-violet-400" />
+                                    <h3 className="text-xl font-medium text-white">Scheduled Posts <span className="text-white/30 text-sm ml-2">({posts.length} Total)</span></h3>
+                                </div>
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => setShowPostModal(true)}
+                                    className="px-4 py-2 bg-violet-500 hover:bg-violet-600 rounded-xl text-white font-medium flex items-center gap-2 transition-colors"
+                                >
+                                    <Plus size={18} />
+                                    New Post
+                                </motion.button>
+                            </div>
+
+                            {!activeAccount ? (
+                                <div className="bg-[#0A0A0B] border border-white/5 rounded-2xl p-12 text-center">
+                                    <p className="text-white/40">Select an account to view posts</p>
+                                </div>
+                            ) : posts.length === 0 ? (
+                                <div className="bg-[#0A0A0B] border border-white/5 rounded-2xl p-12 text-center">
+                                    <Calendar size={48} className="mx-auto text-white/20 mb-4" />
+                                    <p className="text-white/40">No posts yet. Create your first scheduled post!</p>
+                                </div>
+                            ) : (
+                                <div className="grid gap-4">
+                                    {posts.map((post) => {
+                                        const statusColors = {
+                                            PENDING: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+                                            PUBLISHED: 'bg-green-500/20 text-green-400 border-green-500/30',
+                                            FAILED: 'bg-red-500/20 text-red-400 border-red-500/30'
+                                        };
+                                        return (
+                                            <div key={post.id} className="bg-[#0A0A0B] border border-white/5 rounded-xl p-6 hover:border-white/10 transition-colors">
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div className="flex-1">
+                                                        <p className="text-white/90 mb-3">{post.content}</p>
+                                                        <div className="flex items-center gap-4 text-xs text-white/40">
+                                                            <span className="flex items-center gap-1">
+                                                                <Clock size={12} />
+                                                                {new Date(post.scheduleDate).toLocaleString()}
+                                                            </span>
+                                                            {post.publishedAt && (
+                                                                <span className="flex items-center gap-1">
+                                                                    <Send size={12} />
+                                                                    Published: {new Date(post.publishedAt).toLocaleString()}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-2">
+                                                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${statusColors[post.status as keyof typeof statusColors]}`}>
+                                                            {post.status}
+                                                        </span>
+                                                        {(post.likes > 0 || post.retweets > 0 || post.replies > 0) && (
+                                                            <div className="flex items-center gap-3 text-xs text-white/50">
+                                                                {post.likes > 0 && <span className="flex items-center gap-1"><Heart size={12} className="text-pink-400" /> {post.likes}</span>}
+                                                                {post.retweets > 0 && <span className="flex items-center gap-1"><Repeat size={12} className="text-green-400" /> {post.retweets}</span>}
+                                                                {post.replies > 0 && <span className="flex items-center gap-1"><MessageCircle size={12} className="text-blue-400" /> {post.replies}</span>}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </motion.div>
+                        )
+                    )}
+
+                    {/* STATS SECTION */}
+                    {!mounted ? null : (
+                        viewMode === 'STATS' && (
+                        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="max-w-[1400px] mx-auto space-y-6">
+                            <div className="flex items-center gap-3 mb-8">
+                                <BarChart3 className="text-violet-400" />
+                                <h3 className="text-xl font-medium text-white">Statistics Dashboard</h3>
+                            </div>
+
+                            {!activeAccount ? (
+                                <div className="bg-[#0A0A0B] border border-white/5 rounded-2xl p-12 text-center">
+                                    <p className="text-white/40">Select an account to view statistics</p>
+                                </div>
+                            ) : !stats ? (
+                                <div className="bg-[#0A0A0B] border border-white/5 rounded-2xl p-12 text-center">
+                                    <BarChart3 size={48} className="mx-auto text-white/20 mb-4" />
+                                    <p className="text-white/40">Loading statistics...</p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Totals Cards */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <StatCard icon={<Send size={20} />} title="Tweets Posted" value={stats.totals.tweetsPosted.toString()} color="text-violet-400" />
+                                        <StatCard icon={<Heart size={20} />} title="Likes Received" value={stats.totals.likesReceived.toString()} color="text-pink-400" />
+                                        <StatCard icon={<Repeat size={20} />} title="Retweets" value={stats.totals.retweetsReceived.toString()} color="text-green-400" />
+                                        <StatCard icon={<MessageCircle size={20} />} title="Replies" value={stats.totals.repliesReceived.toString()} color="text-blue-400" />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <StatCard icon={<Eye size={20} />} title="Profile Views" value={stats.totals.profileViews.toString()} color="text-purple-400" />
+                                        <StatCard icon={<UserPlus size={20} />} title="Followers" value={stats.totals.followersCount.toString()} color="text-cyan-400" />
+                                        <StatCard icon={<TrendingUp size={20} />} title="Following" value={stats.totals.followingCount.toString()} color="text-orange-400" />
+                                        <StatCard icon={<Activity size={20} />} title="Engagement Rate" value={stats.totals.likesReceived > 0 ? ((stats.totals.likesReceived + stats.totals.retweetsReceived + stats.totals.repliesReceived) / (stats.totals.tweetsPosted || 1) * 100).toFixed(1) + '%' : '0%'} color="text-emerald-400" />
+                                    </div>
+
+                                    {/* Daily Stats Table */}
+                                    <div className="bg-[#0A0A0B] border border-white/5 rounded-2xl overflow-hidden">
+                                        <div className="px-6 py-4 border-b border-white/5">
+                                            <h4 className="text-sm font-medium text-white/70">Daily Breakdown (Last {stats.stats.length} days)</h4>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm">
+                                                <thead className="text-xs uppercase text-white/30 bg-white/[0.02]">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-left">Date</th>
+                                                        <th className="px-4 py-3 text-center">Posted</th>
+                                                        <th className="px-4 py-3 text-center">Likes ↑</th>
+                                                        <th className="px-4 py-3 text-center">Likes ↓</th>
+                                                        <th className="px-4 py-3 text-center">RTs ↑</th>
+                                                        <th className="px-4 py-3 text-center">RTs ↓</th>
+                                                        <th className="px-4 py-3 text-center">Follows</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-white/5">
+                                                    {stats.stats.slice(-10).reverse().map((stat: any, idx: number) => (
+                                                        <tr key={idx} className="hover:bg-white/[0.02]">
+                                                            <td className="px-4 py-3 text-white/60">{new Date(stat.date).toLocaleDateString()}</td>
+                                                            <td className="px-4 py-3 text-center text-white/80">{stat.tweetsPosted}</td>
+                                                            <td className="px-4 py-3 text-center text-pink-400">{stat.likesGiven}</td>
+                                                            <td className="px-4 py-3 text-center text-violet-400">{stat.likesReceived}</td>
+                                                            <td className="px-4 py-3 text-center text-green-400">{stat.retweetsGiven}</td>
+                                                            <td className="px-4 py-3 text-center text-emerald-400">{stat.retweetsReceived}</td>
+                                                            <td className="px-4 py-3 text-center text-cyan-400">{stat.followsGiven}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </motion.div>
+                        )
+                    )}
                 </div>
             </main>
 
@@ -603,8 +885,26 @@ export default function Dashboard() {
                                                 </div>
                                             </div>
                                         </div>
+                                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-2">
+                                            <p className="text-xs text-amber-400">
+                                                ⚠️ <strong>Important:</strong> L'email est requis pour la vérification de sécurité automatique.
+                                            </p>
+                                        </div>
                                         <div className="p-4 bg-violet-500/10 border border-violet-500/20 rounded-2xl mb-4">
-                                            <Input label="Auth Token (Cookie) - OVERRIDES LOGIN" value={newAcc.authToken} onChange={(v: string) => setNewAcc({ ...newAcc, authToken: v })} placeholder="e.g. 1a2b3c4d5e... (Optional but recommended)" />
+                                            <div className="flex items-start justify-between mb-2">
+                                                <Input label="Auth Token (Cookie) - SKIP LOGIN" value={newAcc.authToken} onChange={(v: string) => setNewAcc({ ...newAcc, authToken: v })} placeholder="e.g. 1a2b3c4d5e..." />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowTokenGuide(true)}
+                                                    className="ml-2 p-2 bg-violet-500/20 hover:bg-violet-500/30 rounded-lg transition-colors shrink-0"
+                                                    title="Comment obtenir mon Auth Token?"
+                                                >
+                                                    <HelpCircle size={18} className="text-violet-400" />
+                                                </button>
+                                            </div>
+                                            <p className="text-[10px] text-violet-300 mt-1">
+                                                💡 Recommandé: Skippe l'étape de connexion automatique
+                                            </p>
                                         </div>
                                     </>
                                 )}
@@ -635,6 +935,321 @@ export default function Dashboard() {
                                 </motion.button>
                             </div>
                         </motion.form>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Create Post Modal */}
+            <AnimatePresence>
+                {showPostModal && (
+                    <motion.div 
+                        key="post-modal-wrapper"
+                        className="fixed inset-0 z-[105] flex items-center justify-center p-6 bg-black/60 backdrop-blur-md"
+                    >
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0"
+                            onClick={() => setShowPostModal(false)}
+                        />
+                        <motion.form
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                            onSubmit={handleCreatePost}
+                            className="w-full max-w-lg bg-[#0f0f11] border border-white/10 rounded-3xl p-8 relative shadow-[0_0_50px_rgba(0,0,0,0.5)] z-10"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-fuchsia-500/5 rounded-3xl pointer-events-none" />
+                            
+                            <button type="button" onClick={() => setShowPostModal(false)} className="absolute top-6 right-6 p-2 bg-white/5 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-colors">
+                                <X size={16} />
+                            </button>
+
+                            <div className="relative">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="p-3 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-2xl shadow-lg">
+                                        <Send size={24} className="text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-semibold text-white">Create New Post</h3>
+                                        <p className="text-xs text-white/40">Schedule a tweet for later or post now</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-white/60 mb-2">Content *</label>
+                                        <textarea
+                                            value={newPost.content}
+                                            onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-violet-500/50 resize-none"
+                                            rows={4}
+                                            placeholder="What's happening?"
+                                            required
+                                        />
+                                        <p className="text-[10px] text-white/30 mt-1">{newPost.content.length}/280 characters</p>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-medium text-white/60 mb-2">Date (Optional)</label>
+                                            <input
+                                                type="date"
+                                                value={newPost.scheduleDate}
+                                                onChange={(e) => setNewPost({ ...newPost, scheduleDate: e.target.value })}
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-white/60 mb-2">Time (Optional)</label>
+                                            <input
+                                                type="time"
+                                                value={newPost.scheduleTime}
+                                                onChange={(e) => setNewPost({ ...newPost, scheduleTime: e.target.value })}
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <motion.button 
+                                        whileHover={{ scale: 1.01 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        type="submit" 
+                                        className="w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white py-4 rounded-xl font-semibold mt-4 hover:from-violet-600 hover:to-fuchsia-600 transition-all shadow-lg flex items-center justify-center gap-2"
+                                    >
+                                        <Send size={18} />
+                                        {newPost.scheduleDate && newPost.scheduleTime ? 'Schedule Post' : 'Post Now'}
+                                    </motion.button>
+                                </div>
+                            </div>
+                        </motion.form>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Auth Token Guide Modal */}
+            <AnimatePresence>
+                {showTokenGuide && (
+                    <motion.div 
+                        initial={{ opacity: 0 }} 
+                        animate={{ opacity: 1 }} 
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[110] p-4"
+                        onClick={() => setShowTokenGuide(false)}
+                    >
+                        <motion.div 
+                            initial={{ scale: 0.9, opacity: 0 }} 
+                            animate={{ scale: 1, opacity: 1 }} 
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-gradient-to-b from-[#141414] to-[#0a0a0a] border border-white/10 rounded-3xl shadow-2xl"
+                        >
+                            <div className="sticky top-0 bg-[#141414]/95 backdrop-blur-xl border-b border-white/10 p-6 z-10">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-3 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl shadow-lg">
+                                            <Cookie size={24} className="text-white" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-2xl font-bold text-white">Récupérer votre Auth Token Twitter</h2>
+                                            <p className="text-sm text-white/50">Guide étape par étape en 2 minutes</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setShowTokenGuide(false)} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+                                        <X size={24} className="text-white/70" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="p-6 space-y-6">
+                                {/* Step 1 */}
+                                <div className="p-5 bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-2xl">
+                                    <div className="flex items-start gap-4">
+                                        <div className="shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">1</div>
+                                        <div className="flex-1">
+                                            <h3 className="font-bold text-blue-400 mb-3 flex items-center gap-2">
+                                                <ExternalLink size={16} />
+                                                Connectez-vous sur X.com
+                                            </h3>
+                                            <ol className="space-y-2 text-sm text-white/80">
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-blue-400 mt-0.5">•</span>
+                                                    <span>Ouvrez un <strong>nouvel onglet</strong> dans votre navigateur</span>
+                                                </li>
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-blue-400 mt-0.5">•</span>
+                                                    <span>Allez sur <a href="https://x.com" target="_blank" className="text-blue-400 hover:underline">https://x.com</a></span>
+                                                </li>
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-blue-400 mt-0.5">•</span>
+                                                    <span><strong>Connectez-vous</strong> avec votre email et mot de passe</span>
+                                                </li>
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-blue-400 mt-0.5">•</span>
+                                                    <span>Vérifiez que vous voyez votre <strong>timeline</strong> (vos tweets)</span>
+                                                </li>
+                                            </ol>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Step 2 */}
+                                <div className="p-5 bg-gradient-to-br from-violet-500/10 to-violet-600/5 border border-violet-500/20 rounded-2xl">
+                                    <div className="flex items-start gap-4">
+                                        <div className="shrink-0 w-8 h-8 bg-violet-500 rounded-full flex items-center justify-center text-white font-bold">2</div>
+                                        <div className="flex-1">
+                                            <h3 className="font-bold text-violet-400 mb-3">Ouvrez les Outils de Développement</h3>
+                                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <div className="p-3 bg-violet-500/10 rounded-xl">
+                                                    <p className="text-xs text-violet-300 mb-1">Windows / Linux</p>
+                                                    <p className="text-lg font-mono font-bold text-violet-400">F12</p>
+                                                </div>
+                                                <div className="p-3 bg-violet-500/10 rounded-xl">
+                                                    <p className="text-xs text-violet-300 mb-1">Mac</p>
+                                                    <p className="text-lg font-mono font-bold text-violet-400">⌘ + ⌥ + I</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Step 3 */}
+                                <div className="p-5 bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-2xl">
+                                    <div className="flex items-start gap-4">
+                                        <div className="shrink-0 w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold">3</div>
+                                        <div className="flex-1">
+                                            <h3 className="font-bold text-purple-400 mb-3">Méthode A: Via Console (Recommandé)</h3>
+                                            <ol className="space-y-2 text-sm text-white/80 mb-4">
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-purple-400 mt-0.5">•</span>
+                                                    <span>Dans les outils de développement, cliquez sur l'onglet <strong>"Console"</strong></span>
+                                                </li>
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-purple-400 mt-0.5">•</span>
+                                                    <span>Copiez-collez le code ci-dessous:</span>
+                                                </li>
+                                            </ol>
+                                            <div className="relative">
+                                                <pre className="p-4 bg-black/50 rounded-xl text-xs text-green-400 font-mono overflow-x-auto border border-purple-500/20">
+{`document.cookie.split(';').forEach((c, i) => {
+  const parts = c.trim().split('=');
+  console.log(i + '. ' + parts[0] + ' = ' + parts[1]);
+});
+
+const token = document.cookie
+  .split(';')
+  .find(c => c.trim().startsWith('auth_token='))
+  ?.split('=')[1];
+
+console.log("✅ AUTH TOKEN:", token);`}
+                                                </pre>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const code = [
+                                                            "document.cookie.split(';').forEach((c, i) => {",
+                                                            "  const parts = c.trim().split('=');",
+                                                            "  console.log(i + '. ' + parts[0] + ' = ' + parts[1]);",
+                                                            "});",
+                                                            "",
+                                                            "const token = document.cookie",
+                                                            "  .split(';')",
+                                                            "  .find(c => c.trim().startsWith('auth_token='))",
+                                                            "  ?.split('=')[1];",
+                                                            "",
+                                                            'console.log("✅ AUTH TOKEN:", token);'
+                                                        ].join('\n');
+                                                        navigator.clipboard.writeText(code);
+                                                    }}
+                                                    className="absolute top-2 right-2 px-3 py-1 bg-purple-500 hover:bg-purple-600 rounded-lg text-xs text-white transition-colors"
+                                                >
+                                                    Copier
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-white/60 mt-2">
+                                                💡 Appuyez sur <strong>Entrée</strong>, puis copiez la valeur affichée après "AUTH TOKEN:"
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Step 4 - Alternative */}
+                                <div className="p-5 bg-gradient-to-br from-pink-500/10 to-pink-600/5 border border-pink-500/20 rounded-2xl">
+                                    <div className="flex items-start gap-4">
+                                        <div className="shrink-0 w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center text-white font-bold">4</div>
+                                        <div className="flex-1">
+                                            <h3 className="font-bold text-pink-400 mb-3">Méthode B: Via Application (Visuel)</h3>
+                                            <ol className="space-y-2 text-sm text-white/80">
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-pink-400 mt-0.5">•</span>
+                                                    <span>Dans les outils de développement, cliquez sur l'onglet <strong>"Application"</strong></span>
+                                                </li>
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-pink-400 mt-0.5">•</span>
+                                                    <span>À gauche, développez <strong>"Cookies"</strong></span>
+                                                </li>
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-pink-400 mt-0.5">•</span>
+                                                    <span>Cliquez sur <strong>https://x.com</strong></span>
+                                                </li>
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-pink-400 mt-0.5">•</span>
+                                                    <span>Cherchez la ligne avec <code className="px-2 py-0.5 bg-pink-500/20 rounded text-pink-400">auth_token</code> dans la colonne "Name"</span>
+                                                </li>
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-pink-400 mt-0.5">•</span>
+                                                    <span><strong>Copiez la valeur</strong> dans la colonne "Value"</span>
+                                                </li>
+                                            </ol>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Step 5 */}
+                                <div className="p-5 bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/20 rounded-2xl">
+                                    <div className="flex items-start gap-4">
+                                        <div className="shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white font-bold">5</div>
+                                        <div className="flex-1">
+                                            <h3 className="font-bold text-green-400 mb-3">Ajoutez au Bot</h3>
+                                            <ol className="space-y-2 text-sm text-white/80">
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-green-400 mt-0.5">•</span>
+                                                    <span>Retournez sur ce dashboard</span>
+                                                </li>
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-green-400 mt-0.5">•</span>
+                                                    <span>Collez le token dans le champ <strong>"Auth Token"</strong></span>
+                                                </li>
+                                                <li className="flex items-start gap-2">
+                                                    <span className="text-green-400 mt-0.5">•</span>
+                                                    <span>Cliquez <strong>"Initialize Node"</strong></span>
+                                                </li>
+                                            </ol>
+                                            <div className="mt-3 p-3 bg-green-500/10 rounded-xl">
+                                                <p className="text-sm text-green-400">
+                                                    ✅ <strong>C'est fini!</strong> Le bot utilisera directement votre session!
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Warning */}
+                                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                                    <p className="text-xs text-amber-300 mb-2">
+                                        ⚠️ <strong>Important:</strong>
+                                    </p>
+                                    <ul className="space-y-1 text-xs text-amber-300/80">
+                                        <li>• Le auth_token dure <strong>plusieurs mois</strong></li>
+                                        <li>• Le bot le <strong>rafraîchit automatiquement</strong> après chaque action</li>
+                                        <li>• Gardez-le <strong>secret</strong> - il donne accès à votre compte</li>
+                                        <li>• Si les actions échouent plus tard, récupérez un nouveau token</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>

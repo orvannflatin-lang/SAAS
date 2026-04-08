@@ -6,6 +6,7 @@ import stealth from 'puppeteer-extra-plugin-stealth';
 import { PrismaClient } from '@prisma/client';
 import { io } from 'socket.io-client';
 import dotenv from 'dotenv';
+import { twitterScheduler } from './utils/scheduler';
 
 dotenv.config();
 
@@ -23,16 +24,32 @@ const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const randomRange = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1) + min);
 
+const USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+];
+
 async function humanMove(page: any) {
-    const x = randomRange(0, 1000);
-    const y = randomRange(0, 800);
-    await page.mouse.move(x, y, { steps: 10 });
+    if (Math.random() > 0.4) return;
+    const width = page.viewportSize()?.width || 1280;
+    const height = page.viewportSize()?.height || 720;
+    
+    const midX = width / 2 + randomRange(-450, 450);
+    const midY = height / 2 + randomRange(-350, 350);
+    await page.mouse.move(midX, midY, { steps: randomRange(10, 25) }).catch(()=>{});
 }
 
 async function humanScroll(page: any) {
     const amount = randomRange(300, 700);
-    await page.mouse.wheel(0, amount);
-    await sleep(randomRange(1000, 3000));
+    const chunks = randomRange(2, 4);
+    for(let j=0; j<chunks; j++) {
+        await page.mouse.wheel(0, amount / chunks);
+        await sleep(randomRange(50, 200));
+    }
+    await sleep(randomRange(1500, 3500));
 }
 
 /**
@@ -83,6 +100,7 @@ const worker = new Worker(
         if (!account) throw new Error('Account not found');
         const username = account.username;
         socket.emit('worker_state', { username, state: 'STARTING' });
+        await prisma.iGAccount.update({ where: { id: accountId }, data: { status: 'ACTIVE' } });
 
         const proxyConfig = account.proxy ? {
             server: `http://${account.proxy.host}:${account.proxy.port}`,
@@ -91,12 +109,38 @@ const worker = new Worker(
         } : undefined;
 
         const browser = await chromium.launch({
-            headless: true, // Required for Docker without X11
+            headless: false, // On met à false pour voir la fenêtre si besoin
+            // channel: 'chrome',
             proxy: proxyConfig,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                '--no-sandbox', 
+                '--disable-setuid-sandbox',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-notifications'
+            ],
+            ignoreDefaultArgs: ['--enable-automation'],
+            timeout: 60000
         });
 
-        const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+        const userAgent = USER_AGENTS[randomRange(0, USER_AGENTS.length - 1)];
+        const context = await browser.newContext({ 
+            userAgent,
+            viewport: { width: 1280, height: 720 },
+            locale: 'en-US,en;q=0.9',
+            timezoneId: 'America/New_York',
+            extraHTTPHeaders: {
+                'Accept-Language': 'en-US,en;q=0.9',
+            }
+        });
+
+        // Mask automation
+        await context.addInitScript(() => {
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            // @ts-ignore
+            window.chrome = { runtime: {} };
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+        });
         if (account.sessionCookies) await context.addCookies(account.sessionCookies as any);
 
         const page = await context.newPage();
@@ -137,6 +181,7 @@ const worker = new Worker(
             clearInterval(screenshotInterval);
             await browser.close();
             socket.emit('worker_state', { username, state: 'IDLE' });
+            await prisma.iGAccount.update({ where: { id: accountId }, data: { status: 'ACTIVE' } });
         }
     },
     { connection: redisConnection }
@@ -153,6 +198,11 @@ const twitterWorker = new Worker(
 
 twitterWorker.on('ready', () => {
     console.log('✅ Twitter Worker is successfully connected to Redis and ready for jobs!');
+    
+    // Start the automatic scheduler for Twitter actions
+    twitterScheduler.start().catch(err => {
+        console.error('Failed to start scheduler:', err);
+    });
 });
 
 twitterWorker.on('active', (job) => {

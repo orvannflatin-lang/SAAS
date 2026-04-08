@@ -94,6 +94,7 @@ model TwitterAccount {
   
   proxy           TwitterProxy?        // One-to-one relation
   posts           TwitterPost[]
+  stats           TwitterStats[]       // Statistics history
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 }
@@ -114,12 +115,45 @@ model TwitterPost {
   content       String?
   mediaUrls     String[]    // Array of image URLs
   scheduleDate  DateTime
+  publishedAt   DateTime?
   communityName String?     // The name or ID of the community
   isComment     Boolean     @default(false)
   parentPostUrl String?     // If comment, the URL of the post to comment on
   status        PostStatus  @default(PENDING)
   
+  // Stats
+  likes         Int         @default(0)
+  retweets      Int         @default(0)
+  replies       Int         @default(0)
+  impressions   Int         @default(0)
+  
   accountId     String
   account       TwitterAccount @relation(fields: [accountId], references: [id])
   createdAt     DateTime    @default(now())
+}
+
+// Statistics tracking
+model TwitterStats {
+  id              String    @id @default(uuid())
+  accountId       String
+  account         TwitterAccount @relation(fields: [accountId], references: [id])
+  
+  // Daily metrics
+  date            DateTime  @db.Date
+  tweetsPosted    Int       @default(0)
+  likesGiven      Int       @default(0)
+  likesReceived   Int       @default(0)
+  retweetsGiven   Int       @default(0)
+  retweetsReceived Int      @default(0)
+  repliesGiven    Int       @default(0)
+  repliesReceived Int       @default(0)
+  followsGiven    Int       @default(0)
+  unfollows       Int       @default(0)
+  profileViews    Int       @default(0)
+  followersCount  Int       @default(0)
+  followingCount  Int       @default(0)
+  
+  createdAt       DateTime  @default(now())
+  
+  @@unique([accountId, date])
 }

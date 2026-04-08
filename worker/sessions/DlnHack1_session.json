@@ -1,0 +1,300 @@
+{
+  "cookies": [
+    {
+      "name": "auth_token",
+      "value": "ac9dfe545737930dc426b3ffe1012b33aff88800",
+      "domain": ".x.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "guest_id_ads",
+      "value": "v1%3A177560256232655132",
+      "domain": ".x.com",
+      "path": "/",
+      "expires": 1810164414.381712,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "guest_id_marketing",
+      "value": "v1%3A177560256232655132",
+      "domain": ".x.com",
+      "path": "/",
+      "expires": 1810164414.382083,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "lang",
+      "value": "en",
+      "domain": "x.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "personalization_id",
+      "value": "\"v1_Bxmwz3pOLufNUnvz2fqn1g==\"",
+      "domain": ".x.com",
+      "path": "/",
+      "expires": 1810162559.919588,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "guest_id",
+      "value": "v1%3A177560256232655132",
+      "domain": ".x.com",
+      "path": "/",
+      "expires": 1810162559.919659,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "twid",
+      "value": "u%3D2041542227000750080",
+      "domain": ".x.com",
+      "path": "/",
+      "expires": 1807140414.382343,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "ct0",
+      "value": "ac74538c24e5c88c0576b6f97fe5061951ba975d3355a384c808ef2be1337f9bbf108fe74d3ff2038da636adc02e6753bdb688ed66c9ec3c73ff7d5ec5d01ce2e266cd8abdedd59636dfcb1225312c41",
+      "domain": ".x.com",
+      "path": "/",
+      "expires": 1810162559.919808,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__cuid",
+      "value": "5e4b07cc29374f73ab6324626ad01179",
+      "domain": ".x.com",
+      "path": "/",
+      "expires": 1810164420,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__cf_bm",
+      "value": "YA3CpE3G15PWuwHP9CB1LxS1GeMVk7JnC.oY338e5zA-1775603610.5340455-1.0.1.1-6p5Ump8D.wWVo_nY64CbjbNftIgInaMONdWJ7_wny78BtoNMwB8CtrPX2TrtZNLCiGDM99R19SNHbLfWNeKq90FXl5Wva6OfGIWx0Te86puIuATwQrJU_QJskRVblDKR",
+      "domain": ".x.com",
+      "path": "/",
+      "expires": 1775605408.135867,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    }
+  ],
+  "localStorage": {},
+  "sessionStorage": {},
+  "fingerprint": {
+    "screen": {
+      "availTop": 0,
+      "availLeft": 0,
+      "pageXOffset": 0,
+      "pageYOffset": 0,
+      "screenX": 0,
+      "hasHDR": true,
+      "width": 393,
+      "height": 852,
+      "availWidth": 393,
+      "availHeight": 852,
+      "clientWidth": 0,
+      "clientHeight": 20,
+      "innerWidth": 0,
+      "innerHeight": 0,
+      "outerWidth": 393,
+      "outerHeight": 852,
+      "colorDepth": 24,
+      "pixelDepth": 24,
+      "devicePixelRatio": 3
+    },
+    "navigator": {
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Mobile/15E148 Safari/604.1",
+      "userAgentData": null,
+      "language": "en-US",
+      "languages": [
+        "en-US"
+      ],
+      "platform": "iPhone",
+      "deviceMemory": null,
+      "hardwareConcurrency": 4,
+      "maxTouchPoints": 5,
+      "product": "Gecko",
+      "productSub": "20030107",
+      "vendor": "Apple Computer, Inc.",
+      "vendorSub": null,
+      "doNotTrack": null,
+      "appCodeName": "Mozilla",
+      "appName": "Netscape",
+      "appVersion": "5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Mobile/15E148 Safari/604.1",
+      "oscpu": null,
+      "extraProperties": {
+        "vendorFlavors": [],
+        "globalPrivacyControl": null,
+        "pdfViewerEnabled": true,
+        "installedApps": []
+      },
+      "webdriver": false
+    },
+    "audioCodecs": {
+      "ogg": "probably",
+      "mp3": "maybe",
+      "wav": "probably",
+      "m4a": "maybe",
+      "aac": "maybe"
+    },
+    "videoCodecs": {
+      "ogg": "",
+      "h264": "probably",
+      "webm": "probably"
+    },
+    "pluginsData": {
+      "plugins": [
+        {
+          "name": "PDF Viewer",
+          "description": "Portable Document Format",
+          "filename": "internal-pdf-viewer",
+          "mimeTypes": [
+            {
+              "type": "application/pdf",
+              "suffixes": "pdf",
+              "description": "Portable Document Format",
+              "enabledPlugin": "PDF Viewer"
+            },
+            {
+              "type": "text/pdf",
+              "suffixes": "pdf",
+              "description": "Portable Document Format",
+              "enabledPlugin": "PDF Viewer"
+            }
+          ]
+        },
+        {
+          "name": "Chrome PDF Viewer",
+          "description": "Portable Document Format",
+          "filename": "internal-pdf-viewer",
+          "mimeTypes": [
+            {
+              "type": "application/pdf",
+              "suffixes": "pdf",
+              "description": "Portable Document Format",
+              "enabledPlugin": "Chrome PDF Viewer"
+            },
+            {
+              "type": "text/pdf",
+              "suffixes": "pdf",
+              "description": "Portable Document Format",
+              "enabledPlugin": "Chrome PDF Viewer"
+            }
+          ]
+        },
+        {
+          "name": "Chromium PDF Viewer",
+          "description": "Portable Document Format",
+          "filename": "internal-pdf-viewer",
+          "mimeTypes": [
+            {
+              "type": "application/pdf",
+              "suffixes": "pdf",
+              "description": "Portable Document Format",
+              "enabledPlugin": "Chromium PDF Viewer"
+            },
+            {
+              "type": "text/pdf",
+              "suffixes": "pdf",
+              "description": "Portable Document Format",
+              "enabledPlugin": "Chromium PDF Viewer"
+            }
+          ]
+        },
+        {
+          "name": "Microsoft Edge PDF Viewer",
+          "description": "Portable Document Format",
+          "filename": "internal-pdf-viewer",
+          "mimeTypes": [
+            {
+              "type": "application/pdf",
+              "suffixes": "pdf",
+              "description": "Portable Document Format",
+              "enabledPlugin": "Microsoft Edge PDF Viewer"
+            },
+            {
+              "type": "text/pdf",
+              "suffixes": "pdf",
+              "description": "Portable Document Format",
+              "enabledPlugin": "Microsoft Edge PDF Viewer"
+            }
+          ]
+        },
+        {
+          "name": "WebKit built-in PDF",
+          "description": "Portable Document Format",
+          "filename": "internal-pdf-viewer",
+          "mimeTypes": [
+            {
+              "type": "application/pdf",
+              "suffixes": "pdf",
+              "description": "Portable Document Format",
+              "enabledPlugin": "WebKit built-in PDF"
+            },
+            {
+              "type": "text/pdf",
+              "suffixes": "pdf",
+              "description": "Portable Document Format",
+              "enabledPlugin": "WebKit built-in PDF"
+            }
+          ]
+        }
+      ],
+      "mimeTypes": [
+        "Portable Document Format~~application/pdf~~pdf",
+        "Portable Document Format~~text/pdf~~pdf"
+      ]
+    },
+    "battery": null,
+    "videoCard": {
+      "renderer": "Apple GPU",
+      "vendor": "Apple Inc."
+    },
+    "multimediaDevices": {
+      "speakers": [],
+      "micros": [],
+      "webcams": []
+    },
+    "fonts": [
+      "Gill Sans",
+      "Helvetica Neue",
+      "Menlo"
+    ],
+    "mockWebRTC": false,
+    "slim": false
+  },
+  "deviceInfo": {
+    "userAgent": "",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 3,
+    "platform": "iPhone"
+  },
+  "createdAt": "2026-04-07T22:55:58.041Z",
+  "lastUsed": "2026-04-07T23:27:29.337Z"
+}

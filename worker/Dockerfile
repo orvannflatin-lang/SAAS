@@ -31,7 +31,7 @@ COPY package*.json ./
 RUN npm install
 
 # Install Playwright browsers (Chromium)
-RUN npx playwright install chromium
+RUN npx playwright install chromium --with-deps
 
 COPY . .
 

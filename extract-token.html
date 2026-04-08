@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twitter Auth Token Extractor</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 { color: #1DA1F2; }
+        .step {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+            border-left: 4px solid #1DA1F2;
+        }
+        code {
+            background: #333;
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #4CAF50;
+        }
+        .warning {
+            background: #ff980020;
+            border-left-color: #ff9800;
+        }
+        .success {
+            background: #4CAF5020;
+            border-left-color: #4CAF50;
+        }
+        button {
+            background: #1DA1F2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover { background: #0d8bd9; }
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            background: #333;
+            color: #4CAF50;
+            border: 1px solid #555;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔑 Twitter Auth Token Extractor</h1>
+    
+    <div class="step warning">
+        <h2>⚠️ Pourquoi le Bot Est Bloqué</h2>
+        <p>Twitter détecte l'automatisation et affiche <strong>en boucle le champ email</strong> au lieu de passer au mot de passe. C'est une protection anti-bot.</p>
+        <p><strong>Solution:</strong> Extraire manuellement le auth_token et le donner au bot.</p>
+    </div>
+
+    <div class="step">
+        <h2>📋 Étape 1: Se Connecter sur X.com</h2>
+        <ol>
+            <li>Ouvrez un <strong>nouvel onglet</strong></li>
+            <li>Allez sur <a href="https://x.com" target="_blank" style="color: #1DA1F2;">https://x.com</a></li>
+            <li><strong>Connectez-vous</strong> normalement avec email + mot de passe</li>
+            <li>Vérifiez que vous voyez votre <strong>timeline</strong></li>
+        </ol>
+    </div>
+
+    <div class="step">
+        <h2>🔍 Étape 2: Extraire le Auth Token</h2>
+        <p><strong>Méthode 1 - Console JavaScript:</strong></p>
+        <ol>
+            <li>Sur la page X.com, appuyez sur <code>F12</code></li>
+            <li>Cliquez sur l'onglet <strong>"Console"</strong></li>
+            <li>Copiez-collez ce code:</li>
+        </ol>
+        <textarea readonly id="code1">// Afficher TOUS les cookies
+console.log("=== TOUS LES COOKIES ===");
+document.cookie.split(';').forEach((c, i) => {
+  const parts = c.trim().split('=');
+  console.log(`${i}. ${parts[0]} = ${parts[1] || '(vide)'}`);
+});
+
+// Extraire auth_token
+const token = document.cookie
+  .split(';')
+  .find(c => c.trim().startsWith('auth_token='))
+  ?.split('=')[1];
+
+console.log("\n✅ VOTRE AUTH TOKEN:");
+console.log(token || "❌ Non trouvé!");
+if (token) {
+  console.log("\n📋 COPIEZ CETTE VALEUR:", token);
+}</textarea>
+        <button onclick="copyCode('code1')">📋 Copier le Code</button>
+
+        <p style="margin-top: 20px;"><strong>Méthode 2 - Via DevTools Application:</strong></p>
+        <ol>
+            <li>Appuyez sur <code>F12</code></li>
+            <li>Onglet <strong>"Application"</strong> (Chrome) ou "Stockage" (Firefox)</li>
+            <li>À gauche: <strong>Cookies</strong> → <strong>https://x.com</strong></li>
+            <li>Cherchez la ligne avec <code>auth_token</code> dans la colonne "Name"</li>
+            <li><strong>Copiez la valeur</strong> dans la colonne "Value"</li>
+        </ol>
+    </div>
+
+    <div class="step success">
+        <h2>✅ Étape 3: Ajouter au Bot</h2>
+        <ol>
+            <li>Allez sur votre dashboard: <a href="http://localhost:3000" target="_blank" style="color: #4CAF50;">http://localhost:3000</a></li>
+            <li>Cliquez sur <strong>"New X Account"</strong></li>
+            <li>Remplissez:
+                <ul>
+                    <li><strong>Username</strong>: Votre username (sans @)</li>
+                    <li><strong>Auth Token</strong>: Collez le token copié</li>
+                </ul>
+            </li>
+            <li>Cliquez <strong>"Initialize Node"</strong></li>
+        </ol>
+        <p><strong>✨ C'est fini!</strong> Le bot utilisera directement ce token et skippera le login!</p>
+    </div>
+
+    <div class="step">
+        <h2>🧪 Tester</h2>
+        <button onclick="copyCode('test')">📋 Copier Commande Test</button>
+        <textarea readonly id="test">cd d:\SAAS
+node trigger_action.js</textarea>
+        <p>Le bot devrait afficher:</p>
+        <pre style="background: #333; padding: 15px; border-radius: 5px;">
+🍪 Chargement des cookies de session...
+✅ Session valide - Accès direct accordé!
+⚡ Exécution de l'action : warmUp</pre>
+    </div>
+
+    <div class="step warning">
+        <h2>💡 Notes Importantes</h2>
+        <ul>
+            <li>Le <code>auth_token</code> dure <strong>plusieurs mois</strong></li>
+            <li>Le bot le <strong>rafraîchit automatiquement</strong></li>
+            <li>Gardez-le <strong>secret</strong> - il donne accès à votre compte</li>
+            <li>Si les actions échouent plus tard, récupérez un nouveau token</li>
+        </ul>
+    </div>
+
+    <script>
+        function copyCode(id) {
+            const textarea = document.getElementById(id);
+            textarea.select();
+            document.execCommand('copy');
+            alert('✅ Code copié!');
+        }
+    </script>
+</body>
+</html>
