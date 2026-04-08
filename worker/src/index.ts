@@ -193,7 +193,10 @@ const worker = new Worker(
 const twitterWorker = new Worker(
     'twitter-actions',
     twitterWorkerHandler,
-    { connection: redisConnection }
+    { 
+        connection: redisConnection,
+        concurrency: 1
+    }
 );
 
 twitterWorker.on('ready', () => {

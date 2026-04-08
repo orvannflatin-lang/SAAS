@@ -290,7 +290,7 @@ async function createStealthSession(
 
     // Launch browser with stealth args
     const browser = await chromium.launch({
-        headless: false, // Must stay visible for user login
+        headless: true, // Doit être true puisque tu utilises Docker sans serveur X11 (et tu utilises les cookies maintenant !)
         proxy: proxyConfig,
         args: [
             '--no-sandbox',
