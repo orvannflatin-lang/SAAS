@@ -146,10 +146,13 @@ export default function NewFeatures({ accounts, selectedAccount: externalSelecte
     const [showTemplateModal, setShowTemplateModal] = useState(false);
     const [showCommentModal, setShowCommentModal] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
+    const [showAddAccountsModal, setShowAddAccountsModal] = useState(false);
+    const [selectedGroupForAccounts, setSelectedGroupForAccounts] = useState<string>('');
     const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
     
     // Form states
     const [newGroup, setNewGroup] = useState({ name: '', description: '', taskType: 'warmup' });
+    const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
     const [newTemplate, setNewTemplate] = useState({ name: '', content: '', type: 'post', hashtags: '' });
     const [newCommentRequest, setNewCommentRequest] = useState({ postUrl: '', totalComments: 10 });
     const [profileForm, setProfileForm] = useState({ bio: '', niche: '' });
@@ -402,6 +405,43 @@ export default function NewFeatures({ accounts, selectedAccount: externalSelecte
     const deleteGroup = async (id: string) => {
         await fetch(`http://localhost:4000/api/groups/${id}`, { method: 'DELETE' });
         fetchData();
+    };
+
+    const openAddAccountsModal = (groupId: string) => {
+        setSelectedGroupForAccounts(groupId);
+        setSelectedAccounts([]);
+        setShowAddAccountsModal(true);
+    };
+
+    const addAccountsToGroup = async () => {
+        if (!selectedGroupForAccounts || selectedAccounts.length === 0) return;
+
+        try {
+            // Update each account's groupId
+            const promises = selectedAccounts.map(accountId =>
+                fetch(`http://localhost:4000/api/twitter-accounts/${accountId}/group`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groupId: selectedGroupForAccounts })
+                })
+            );
+
+            const results = await Promise.all(promises);
+            const successCount = results.filter(r => r.ok).length;
+
+            if (successCount > 0) {
+                alert(`✅ ${successCount} compte(s) ajouté(s) au groupe avec succès!`);
+                setShowAddAccountsModal(false);
+                setSelectedAccounts([]);
+                setSelectedGroupForAccounts('');
+                fetchData();
+            } else {
+                alert('❌ Erreur lors de l\'ajout des comptes');
+            }
+        } catch (error) {
+            console.error('Error adding accounts to group:', error);
+            alert('❌ Erreur lors de l\'ajout des comptes');
+        }
     };
 
     // Template functions
@@ -709,8 +749,18 @@ export default function NewFeatures({ accounts, selectedAccount: externalSelecte
                                                 <span className="font-medium">{group._count?.accounts || group.accounts?.length || 0}</span>
                                                 <span>comptes</span>
                                             </div>
-                                            <div className="text-xs text-slate-500">
-                                                {new Date(group.createdAt).toLocaleDateString('fr-FR')}
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-xs text-slate-500">
+                                                    {new Date(group.createdAt).toLocaleDateString('fr-FR')}
+                                                </div>
+                                                <button
+                                                    onClick={() => openAddAccountsModal(group.id)}
+                                                    className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1"
+                                                    title="Ajouter des comptes"
+                                                >
+                                                    <Plus className="w-3 h-3" />
+                                                    Ajouter
+                                                </button>
                                             </div>
                                         </div>
                                     </motion.div>
@@ -1211,6 +1261,86 @@ export default function NewFeatures({ accounts, selectedAccount: externalSelecte
                                 <button onClick={createGroup} className="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
                                     Créer
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Add Accounts to Group Modal */}
+                {showAddAccountsModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <div className="bg-slate-800 rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+                            <h3 className="text-xl font-bold mb-4">Ajouter des Comptes au Groupe</h3>
+                            <p className="text-sm text-slate-400 mb-4">
+                                Sélectionnez les comptes à ajouter au groupe
+                            </p>
+                            
+                            <div className="flex-1 overflow-y-auto mb-4 space-y-2">
+                                {accounts
+                                    .filter((account: any) => account.groupId !== selectedGroupForAccounts)
+                                    .map((account: any) => (
+                                        <label
+                                            key={account.id}
+                                            className="flex items-center gap-3 p-3 bg-slate-700/50 hover:bg-slate-700 rounded-lg cursor-pointer transition-all"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedAccounts.includes(account.id)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) {
+                                                        setSelectedAccounts([...selectedAccounts, account.id]);
+                                                    } else {
+                                                        setSelectedAccounts(selectedAccounts.filter(id => id !== account.id));
+                                                    }
+                                                }}
+                                                className="w-4 h-4 rounded border-slate-600 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            <div className="flex-1">
+                                                <div className="font-medium text-white">@{account.username}</div>
+                                                <div className="text-xs text-slate-400">
+                                                    {account.groupId ? `Groupe actuel: ${groups.find(g => g.id === account.groupId)?.name || 'Unknown'}` : 'Pas de groupe'}
+                                                </div>
+                                            </div>
+                                            <div className={`text-xs px-2 py-1 rounded ${
+                                                account.status === 'ACTIVE' || account.status === 'CONNECTED'
+                                                    ? 'bg-green-500/20 text-green-400'
+                                                    : 'bg-slate-600 text-slate-400'
+                                            }`}>
+                                                {account.status || 'IDLE'}
+                                            </div>
+                                        </label>
+                                    ))}
+                                
+                                {accounts.filter((a: any) => a.groupId !== selectedGroupForAccounts).length === 0 && (
+                                    <div className="text-center py-8 text-slate-500">
+                                        <p>Tous les comptes sont déjà dans ce groupe</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex items-center justify-between pt-4 border-t border-slate-700">
+                                <div className="text-sm text-slate-400">
+                                    {selectedAccounts.length} compte(s) sélectionné(s)
+                                </div>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => {
+                                            setShowAddAccountsModal(false);
+                                            setSelectedAccounts([]);
+                                            setSelectedGroupForAccounts('');
+                                        }} 
+                                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg"
+                                    >
+                                        Annuler
+                                    </button>
+                                    <button 
+                                        onClick={addAccountsToGroup}
+                                        disabled={selectedAccounts.length === 0}
+                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
+                                    >
+                                        Ajouter {selectedAccounts.length > 0 ? `(${selectedAccounts.length})` : ''}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

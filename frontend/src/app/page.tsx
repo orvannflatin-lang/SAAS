@@ -125,10 +125,18 @@ export default function Dashboard() {
     const [screenshots, setScreenshots] = useState<Record<string, string>>({});
     const [activeAccount, setActiveAccount] = useState('');
     const [viewMode, setViewMode] = useState<'SINGLE' | 'GRID' | 'PROXIES' | 'ACCOUNTS' | 'POSTS' | 'STATS'>('SINGLE');
-    const [platform, setPlatform] = useState<'INSTAGRAM' | 'TWITTER'>('TWITTER');
+    const [platform, setPlatform] = useState<'INSTAGRAM' | 'TWITTER'>(() => {
+        // Lazy initialization to avoid hydration mismatch
+        if (typeof window !== 'undefined') {
+            const savedPlatform = localStorage.getItem('nexus_platform') as 'INSTAGRAM' | 'TWITTER';
+            if (savedPlatform && (savedPlatform === 'INSTAGRAM' || savedPlatform === 'TWITTER')) {
+                return savedPlatform;
+            }
+        }
+        return 'TWITTER';
+    });
     const [showAddModal, setShowAddModal] = useState(false);
     const [showTokenGuide, setShowTokenGuide] = useState(false);
-    const [mounted, setMounted] = useState(false);
     const [showNewFeatures, setShowNewFeatures] = useState(false);
 
     // Posts & Stats State
@@ -175,18 +183,10 @@ export default function Dashboard() {
     const [unreadNotifications, setUnreadNotifications] = useState(0);
 
     useEffect(() => {
-        setMounted(true);
-        const savedPlatform = localStorage.getItem('nexus_platform') as 'INSTAGRAM' | 'TWITTER';
-        if (savedPlatform && (savedPlatform === 'INSTAGRAM' || savedPlatform === 'TWITTER')) {
-            setPlatform(savedPlatform);
-        }
-    }, []);
-
-    useEffect(() => {
-        if (!mounted) return;
+        // Save platform preference
         localStorage.setItem('nexus_platform', platform);
         fetchAccounts(platform);
-    }, [platform, mounted]);
+    }, [platform]);
 
     useEffect(() => {
         const socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000');
@@ -251,7 +251,20 @@ export default function Dashboard() {
 
     const fetchStats = async (accountId: string, days: number = 30) => {
         try {
-            const res = await fetch(`http://localhost:4000/api/twitter-stats/${accountId}?days=${days}`);
+            // accountId might be username, so find the actual account ID
+            let actualAccountId = accountId;
+            if (!accountId.includes('-')) {
+                // It's a username, find the account
+                const account = accounts.find(a => a.username === accountId);
+                if (account) {
+                    actualAccountId = account.id;
+                } else {
+                    console.error('Account not found:', accountId);
+                    return;
+                }
+            }
+            
+            const res = await fetch(`http://localhost:4000/api/twitter-stats/${actualAccountId}?days=${days}`);
             const data = await res.json();
             setStats(data);
         } catch (err) {
@@ -1011,8 +1024,7 @@ export default function Dashboard() {
                     )}
 
                     {/* POSTS SECTION */}
-                    {!mounted ? null : (
-                        viewMode === 'POSTS' && (
+                    {viewMode === 'POSTS' && (
                             <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="max-w-[1400px] mx-auto space-y-6">
                             <div className="flex items-center justify-between mb-8">
                                 <div className="flex items-center gap-3">
@@ -1084,12 +1096,10 @@ export default function Dashboard() {
                                 </div>
                             )}
                         </motion.div>
-                        )
                     )}
 
                     {/* STATS SECTION */}
-                    {!mounted ? null : (
-                        viewMode === 'STATS' && (
+                    {viewMode === 'STATS' && (
                         <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="max-w-[1400px] mx-auto space-y-6">
                             <div className="flex items-center gap-3 mb-8">
                                 <BarChart3 className="text-violet-400" />
@@ -1159,7 +1169,6 @@ export default function Dashboard() {
                                 </>
                             )}
                         </motion.div>
-                        )
                     )}
                 </div>
             </main>
@@ -1737,8 +1746,7 @@ function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index,
     // Actions mapping depending on platform
     const platformActions = platform === 'TWITTER' ? [
         { id: 'warmUp', label: 'Day 1: Warm Up'},
-        { id: 'setupProfile', label: 'Day 2: Setup Profile'},
-        { id: 'joinCommunity', label: 'Day 3: Join Communities'},
+        { id: 'joinCommunity', label: 'Day 2: Join Communities'},
         { id: 'postCommunity', label: 'Day 3: Post Captions'},
         { id: 'spamComments', label: 'Day 4: Spam Comments (Support)'}
     ] : [

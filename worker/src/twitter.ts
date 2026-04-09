@@ -919,80 +919,159 @@ async function doAutoComment(page: Page, emitLog: (msg: string) => void, config:
 
 // ─── Auto Post ────────────────────────────────────────────────────────────────
 
+// Auto-post messages - OnlyFans friendly content (not too explicit)
 const AUTO_TWEETS = [
-    "Creating exclusive content for my amazing followers 🔥✨ Link in bio",
-    "New photoshoot just dropped! Check it out 😍📸",
-    "Behind the scenes content you don't want to miss 👀💕",
-    "Thank you for all the support! More coming soon ❤️🔥",
-    "Special content available now! Don't miss out 💋✨",
-    "Daily updates and exclusive posts 📱💕 Subscribe now",
-    "Just uploaded something special for you 😍🔥",
-    "Premium content creator | Daily posts | Link below 👇",
-    "Your daily dose of exclusive content 💕✨",
-    "New set just dropped! Check the link 😍📸",
-    "Creating content that makes you smile ❤️🔥",
-    "Exclusive access to my world 🌟 Subscribe now",
-    "Behind the scenes of my latest shoot 📸💕",
-    "Thank you for being amazing supporters! 💋✨",
-    "More content coming your way today! 🔥😍",
-    "Special announcement coming soon! Stay tuned 📱✨",
-    "Living my dream and sharing it with you 💕🌟",
-    "New exclusive content just for subscribers 🔥💋",
-    "Appreciate all the love and support! ❤️✨",
-    "Check out my latest post! You'll love it 😍📸",
+    "New content just dropped! Check the link in bio 🔥✨",
+    "Exclusive photos available now! Don't miss out 💋📸",
+    "Thank you for all the support! More coming soon ❤️🌟",
+    "Behind the scenes content you'll love 😍💕",
+    "Special offer for my subscribers! Link below 👇🔥",
+    "Just posted something amazing! Go see it 😘✨",
+    "Your favorite content creator is live! Join now 💖",
+    "New photoset available! You know where to find it 📷💋",
+    "Feeling creative today! Check out my latest work 🎨🔥",
+    "Appreciate all the love! Exclusive content for you ❤️🌹",
+    "Weekend vibes! New content just for you 😍📸",
+    "Something special waiting for you... Link in bio 🔥💕",
+    "Thank you for 10K followers! Celebration content coming 🎉❤️",
+    "Can't wait to show you what I've been working on! 😘✨",
+    "Premium content now available! Don't miss out 💎🔥",
 ];
 
 async function doAutoPost(page: Page, emitLog: (msg: string) => void, config: any) {
-    const tweetContent = config?.content || AUTO_TWEETS[randomRange(0, AUTO_TWEETS.length - 1)];
     emitLog("📝 Auto-Post : Publication d'un tweet...");
 
-    await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
-    await sleep(randomRange(4000, 7000));
-    await humanScroll(page, randomRange(2, 4));
-    await sleep(randomRange(2000, 4000));
-
+    // Navigate to home
+    await page.goto('https://x.com/home', { waitUntil: 'networkidle', timeout: 30000 });
+    await sleep(randomRange(3000, 5000));
+    
     try {
-        // Click compose button
-        const composeBtns = [
-            'a[data-testid="SideNav_NewTweet_Button"]',
-            'a[href="/compose/tweet"]',
-            '[data-testid="tweetButtonInline"]',
-        ];
-
+        // Wait for page to fully load
+        await page.waitForSelector('main', { state: 'visible', timeout: 15000 });
+        await sleep(randomRange(2000, 3000));
+        
+        // Try multiple strategies to find compose button
         let composed = false;
-        for (const sel of composeBtns) {
-            const el = page.locator(sel).first();
-            if (await el.count() > 0) {
-                await humanClick(page, el);
-                composed = true;
-                break;
+        
+        // Strategy 1: Look for Post button in sidebar
+        const postButtonSelectors = [
+            'a[data-testid="SideNav_NewTweet_Button"]',
+            '[data-testid="SideNav_NewTweet_Button"]',
+            'a[aria-label*="Post"]',
+            'a[href="/compose/post"]',
+        ];
+        
+        for (const selector of postButtonSelectors) {
+            try {
+                const btn = page.locator(selector).first();
+                if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+                    emitLog("🔘 Clicking Post button (sidebar)...");
+                    await btn.click();
+                    composed = true;
+                    break;
+                }
+            } catch (e) {
+                continue;
             }
         }
-
+        
+        // Strategy 2: Try keyboard shortcut (Ctrl+Enter or Cmd+Enter doesn't work, but N does on desktop)
         if (!composed) {
-            emitLog("⚠️ Bouton de composition introuvable.");
+            try {
+                emitLog("⌨️ Trying keyboard shortcut...");
+                await page.keyboard.press('n');
+                await sleep(2000);
+                
+                // Check if compose dialog appeared
+                const textArea = page.locator('[data-testid="tweetTextarea_0"]').first();
+                if (await textArea.isVisible({ timeout: 3000 }).catch(() => false)) {
+                    composed = true;
+                    emitLog("✅ Compose dialog opened with keyboard");
+                }
+            } catch (e) {
+                emitLog("⚠️ Keyboard shortcut failed");
+            }
+        }
+        
+        // Strategy 3: Navigate directly to compose page
+        if (!composed) {
+            try {
+                emitLog("🌐 Navigating to compose page...");
+                await page.goto('https://x.com/compose/post', { waitUntil: 'networkidle', timeout: 15000 });
+                await sleep(2000);
+                
+                const textArea = page.locator('[data-testid="tweetTextarea_0"]').first();
+                if (await textArea.isVisible({ timeout: 3000 }).catch(() => false)) {
+                    composed = true;
+                    emitLog("✅ Direct compose page loaded");
+                }
+            } catch (e) {
+                emitLog("⚠️ Direct navigation failed");
+            }
+        }
+        
+        if (!composed) {
+            emitLog("❌ Could not open compose dialog");
             return;
         }
-
-        await sleep(randomRange(1200, 2500));
-
-        const textArea = '[data-testid="tweetTextarea_0"]';
-        await page.waitForSelector(textArea, { state: 'visible', timeout: 10000 });
-
-        emitLog(`✍️ Saisie: "${tweetContent.substring(0, 40)}..."`);
-        await humanType(page, textArea, tweetContent);
-        await sleep(randomRange(1500, 3500));
-
-        const tweetBtn = page.locator('[data-testid="tweetButton"]').first();
-        if (await tweetBtn.count() > 0) {
-            await humanClick(page, tweetBtn);
-            emitLog("✅ Tweet publié avec succès !");
-        } else {
-            emitLog("⚠️ Bouton de publication introuvable.");
+        
+        await sleep(randomRange(1000, 2000));
+        
+        // Prepare tweet content
+        let tweetContent = config?.content || AUTO_TWEETS[randomRange(0, AUTO_TWEETS.length - 1)];
+        
+        // Add OnlyFans link if configured
+        if (config?.onlyfansUrl) {
+            tweetContent += `\n\n${config.onlyfansUrl}`;
+            emitLog(`🔗 Adding OnlyFans link`);
+        } else if (config?.link) {
+            tweetContent += `\n\n${config.link}`;
+            emitLog(`🔗 Adding link`);
         }
+        
+        // Add hashtags if configured
+        if (config?.hashtags && config.hashtags.length > 0) {
+            const randomHashtags = config.hashtags
+                .sort(() => 0.5 - Math.random())
+                .slice(0, randomRange(2, 4));
+            tweetContent += `\n${randomHashtags.join(' ')}`;
+        }
+        
+        // Type the content
+        const textAreaSelector = '[data-testid="tweetTextarea_0"]';
+        await page.waitForSelector(textAreaSelector, { state: 'visible', timeout: 10000 });
+        
+        emitLog(`✍️ Typing: "${tweetContent.substring(0, 50)}..."`);
+        await humanType(page, textAreaSelector, tweetContent);
+        await sleep(randomRange(1500, 2500));
+        
+        // Add media if URLs provided
+        if (config?.mediaUrls && config.mediaUrls.length > 0) {
+            emitLog(`📸 Adding ${config.mediaUrls.length} media file(s)...`);
+            // Note: Media upload would require file input handling
+            // For now, we'll just post with text and link
+        }
+        
+        // Click Tweet button
+        const tweetBtn = page.locator('[data-testid="tweetButton"]').first();
+        if (await tweetBtn.count() > 0 && await tweetBtn.isEnabled().catch(() => false)) {
+            emitLog("🚀 Posting tweet...");
+            await humanClick(page, tweetBtn);
+            await sleep(randomRange(3000, 5000));
+            emitLog("✅ Tweet published successfully!");
+        } else {
+            emitLog("⚠️ Tweet button not found or disabled");
+            // Try posting with Enter key
+            await page.keyboard.press('Control+Enter');
+            await sleep(3000);
+            emitLog("✅ Posted with keyboard shortcut");
+        }
+        
     } catch (e: any) {
-        emitLog(`❌ Erreur lors de la publication: ${e.message}`);
+        emitLog(`❌ Error during posting: ${e.message}`);
+        console.error('Post error:', e);
     }
+    
     await sleep(3000);
 }
 

@@ -72,6 +72,24 @@ const upload = multer({
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
+// Helper function to map action to stats field
+function getActivityField(action: string): string | null {
+    const actionMap: Record<string, string> = {
+        'warmUp': 'tweetsPosted', // Count warmups as activity
+        'autoPost': 'tweetsPosted',
+        'autoLike': 'likesGiven',
+        'autoComment': 'repliesGiven',
+        'autoFollow': 'followsGiven',
+        'autoRetweet': 'retweetsGiven',
+        'like': 'likesGiven',
+        'comment': 'repliesGiven',
+        'follow': 'followsGiven',
+        'retweet': 'retweetsGiven',
+        'post': 'tweetsPosted'
+    };
+    return actionMap[action] || null;
+}
+
 // --- API ENDPOINTS ---
 
 /**
@@ -645,6 +663,33 @@ app.post('/api/activities', async (req, res) => {
                 status: status || 'SUCCESS'
             }
         });
+
+        // Update daily stats if activity was successful
+        if (status === 'SUCCESS' || !status) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const actionField = getActivityField(action);
+            if (actionField) {
+                await prisma.twitterStats.upsert({
+                    where: {
+                        accountId_date: {
+                            accountId,
+                            date: today
+                        }
+                    },
+                    update: {
+                        [actionField]: { increment: 1 }
+                    },
+                    create: {
+                        accountId,
+                        date: today,
+                        [actionField]: 1
+                    }
+                });
+            }
+        }
+
         res.status(201).json(activity);
     } catch (error: any) {
         res.status(400).json({ error: error.message });
@@ -861,6 +906,48 @@ io.on('connection', (socket) => {
     // Handle notification events
     socket.on('job_completed', async (data) => {
         try {
+            // Find the account by username
+            const account = await prisma.twitterAccount.findFirst({
+                where: { username: data.username }
+            });
+
+            // Create activity log entry
+            if (account) {
+                await prisma.activityLog.create({
+                    data: {
+                        accountId: account.id,
+                        action: data.action || 'unknown',
+                        message: data.message || `Action ${data.action} completed`,
+                        status: 'SUCCESS',
+                        details: data.details || {}
+                    }
+                });
+
+                // Update daily stats for this account
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                const actionField = getActivityField(data.action);
+                if (actionField) {
+                    await prisma.twitterStats.upsert({
+                        where: {
+                            accountId_date: {
+                                accountId: account.id,
+                                date: today
+                            }
+                        },
+                        update: {
+                            [actionField]: { increment: 1 }
+                        },
+                        create: {
+                            accountId: account.id,
+                            date: today,
+                            [actionField]: 1
+                        }
+                    });
+                }
+            }
+
             // Create notification in database
             await prisma.notification.create({
                 data: {
@@ -886,6 +973,24 @@ io.on('connection', (socket) => {
     
     socket.on('job_failed', async (data) => {
         try {
+            // Find the account by username
+            const account = await prisma.twitterAccount.findFirst({
+                where: { username: data.username }
+            });
+
+            // Create activity log entry with FAILED status
+            if (account) {
+                await prisma.activityLog.create({
+                    data: {
+                        accountId: account.id,
+                        action: data.action || 'unknown',
+                        message: data.error || data.message || `Action ${data.action} failed`,
+                        status: 'FAILED',
+                        details: { error: data.error, ...data.details }
+                    }
+                });
+            }
+
             await prisma.notification.create({
                 data: {
                     userId: 'temp-user-id',

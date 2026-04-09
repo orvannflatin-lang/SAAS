@@ -82,7 +82,7 @@ class TwitterScheduler {
                 // Check if enough time passed since last group action
                 const lastActionTime = group.updatedAt ? new Date(group.updatedAt).getTime() : 0;
                 const timeSinceLastAction = now.getTime() - lastActionTime;
-                const minInterval = 30 * 60 * 1000; // 30 minutes
+                const minInterval = 2 * 60 * 60 * 1000; // 2 hours (increased from 30 min)
                 
                 if (timeSinceLastAction < minInterval) continue;
 
@@ -97,8 +97,8 @@ class TwitterScheduler {
                     
                     if (hasPendingJob) continue;
 
-                    // Add job to queue
-                    const delay = Math.random() * 5 * 60 * 1000; // 0-5 min random delay
+                    // Add job to queue with LONGER random delay (5-15 min)
+                    const delay = (5 + Math.random() * 10) * 60 * 1000; // 5-15 min random delay
                     
                     await this.queue.add(
                         `group-${group.id}-${taskType}-${account.username}`,
@@ -112,7 +112,7 @@ class TwitterScheduler {
                         {
                             delay: Math.floor(delay),
                             attempts: 2,
-                            backoff: { type: 'exponential', delay: 60000 }
+                            backoff: { type: 'exponential', delay: 120000 } // 2 min backoff
                         }
                     );
                 }
@@ -175,8 +175,8 @@ class TwitterScheduler {
         const hour = now.getHours();
         const dayOfWeek = now.getDay();
 
-        // Random delay between actions (30-120 minutes)
-        const minInterval = 30 * 60 * 1000; // 30 minutes
+        // Random delay between actions (2-4 hours for safety)
+        const minInterval = 2 * 60 * 60 * 1000; // 2 hours minimum
         
         // Check if enough time passed since last action (using updatedAt as proxy)
         const lastActionTime = account.updatedAt ? new Date(account.updatedAt).getTime() : 0;
@@ -189,8 +189,8 @@ class TwitterScheduler {
         const action = this.selectAction(hour, dayOfWeek);
         if (!action) return;
 
-        // Add job to queue with delay
-        const delay = Math.random() * 5 * 60 * 1000; // 0-5 min random delay
+        // Add job to queue with LONGER delay (10-20 min)
+        const delay = (10 + Math.random() * 10) * 60 * 1000; // 10-20 min random delay
         
         await this.queue.add(
             `twitter-${action}-${username}`,
@@ -202,7 +202,7 @@ class TwitterScheduler {
             {
                 delay: Math.floor(delay),
                 attempts: 2,
-                backoff: { type: 'exponential', delay: 60000 }
+                backoff: { type: 'exponential', delay: 120000 } // 2 min backoff
             }
         );
 
@@ -272,7 +272,29 @@ class TwitterScheduler {
             case 'autoComment':
                 return { count: Math.floor(Math.random() * 3) + 2 }; // 2-4 comments
             case 'autoPost':
-                return {}; // Uses default tweets
+            case 'postCommunity':
+                // OnlyFans promotional posts with links
+                const onlyfansLinks = [
+                    'https://onlyfans.com/yourusername',
+                    // Add more OnlyFans URLs here
+                ];
+                
+                const hashtags = [
+                    '#contentcreator', '#exclusive', '#subscription', '#premium',
+                    '#photography', '#model', '#lifestyle', '#fitness',
+                    '#fashion', '#beauty', '#art', '#creative'
+                ];
+                
+                return {
+                    // Random OnlyFans link (if any configured)
+                    onlyfansUrl: onlyfansLinks.length > 0 
+                        ? onlyfansLinks[Math.floor(Math.random() * onlyfansLinks.length)]
+                        : undefined,
+                    // Random hashtags
+                    hashtags: hashtags
+                        .sort(() => 0.5 - Math.random())
+                        .slice(0, Math.floor(Math.random() * 3) + 2) // 2-4 hashtags
+                };
             default:
                 return {};
         }
