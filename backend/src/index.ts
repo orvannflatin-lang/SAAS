@@ -503,6 +503,33 @@ app.put('/api/twitter-accounts/:id', authenticateToken, async (req: AuthRequest,
 });
 
 /**
+ * Update Twitter account profile (bio, images, niche)
+ */
+app.patch('/api/twitter-accounts/:id/profile', authenticateToken, async (req: AuthRequest, res) => {
+    const { id } = req.params;
+    const { bio, niche, profileImage, bannerImage } = req.body;
+
+    try {
+        const account = await prisma.twitterAccount.findUnique({ where: { id } });
+        if (!account) return res.status(404).json({ error: 'Compte non trouvé' });
+
+        const updated = await prisma.twitterAccount.update({
+            where: { id },
+            data: {
+                ...(bio !== undefined && { bio }),
+                ...(niche !== undefined && { niche }),
+                ...(profileImage !== undefined && { profileImage }),
+                ...(bannerImage !== undefined && { bannerImage }),
+            }
+        });
+
+        res.json(updated);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+/**
  * Delete a Twitter account
  */
 app.delete('/api/twitter-accounts/:id', authenticateToken, async (req: AuthRequest, res) => {

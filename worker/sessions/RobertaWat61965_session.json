@@ -15,7 +15,7 @@
       "value": "v1%3A177580855480618275",
       "domain": ".x.com",
       "path": "/",
-      "expires": 1810375225.302507,
+      "expires": 1810389074.396186,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -25,7 +25,7 @@
       "value": "v1%3A177580855480618275",
       "domain": ".x.com",
       "path": "/",
-      "expires": 1810375225.302611,
+      "expires": 1810389074.396345,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -65,7 +65,7 @@
       "value": "u%3D2038370214115418112",
       "domain": ".x.com",
       "path": "/",
-      "expires": 1807351225.302667,
+      "expires": 1807365074.39643,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -85,17 +85,27 @@
       "value": "d7a78ac9083b48b1ae4381fb2470b642",
       "domain": ".x.com",
       "path": "/",
-      "expires": 1810375229,
+      "expires": 1810389078,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "lang",
+      "value": "en",
+      "domain": "upload.x.com",
+      "path": "/",
+      "expires": -1,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
     },
     {
       "name": "__cf_bm",
-      "value": "QpgBOKmecnONKdthE79gW75vZ0c0dqkl8ubSxlml3WE-1775815183.1949224-1.0.1.1-L_oQUeH1otD75EkMVK_vi1ElyrfwVD5mSd8ZbPB.rqswtCZXZQmmskHldliXn5eatyyB3JWu9UVX7QBbm0PN5Ay0Q7aS0bFibJilfV7hpueJkbUoGB0O06e8ArF.N9Lk",
+      "value": "BFmTb80k7TRIKKSBnGB9mhexK7UT2bFguPZY6ycSEbA-1775828526.132258-1.0.1.1-6J7UyhWOnS3XR5vEcF0tAnKpyny4yf.mTgybw3w_ppNrS1AzfVfTPcMsOXbvDp_yOCNpqYApSiijmlwdBy0j.vxqNqyeFkIUAeYkDjb35gxZOG0m9oYgzE1YuuxwNAfT",
       "domain": ".x.com",
       "path": "/",
-      "expires": 1775816983.608006,
+      "expires": 1775830326.409611,
       "httpOnly": true,
       "secure": true,
       "sameSite": "Lax"
@@ -296,5 +306,5 @@
     "platform": "iPhone"
   },
   "createdAt": "2026-04-10T08:09:12.098Z",
-  "lastUsed": "2026-04-10T10:00:57.993Z"
+  "lastUsed": "2026-04-10T13:52:17.464Z"
 }

@@ -2088,7 +2088,8 @@ function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index,
         { id: 'warmUp', label: 'Day 1: Warm Up'},
         { id: 'joinCommunity', label: 'Day 2: Join Communities'},
         { id: 'postCommunity', label: 'Day 3: Post Captions'},
-        { id: 'spamComments', label: 'Day 4: Spam Comments (Support)'}
+        { id: 'spamComments', label: 'Day 4: Spam Comments (Support)'},
+        { id: 'updateProfile', label: '🪪 Mettre à jour le Profil'}
     ] : [
         { id: 'warmUp', label: 'Warm Up Account'},
         { id: 'follow', label: 'Follow Target'}

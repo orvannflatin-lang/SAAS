@@ -7,6 +7,10 @@ import { FingerprintInjector } from 'fingerprint-injector';
 import { PrismaClient } from '@prisma/client';
 import { io } from 'socket.io-client';
 import { sessionManager, SessionData } from './utils/session-manager';
+import fs from 'fs';
+import path from 'path';
+import https from 'https';
+import http from 'http';
 
 const prisma = new PrismaClient();
 const socket = io(process.env.BACKEND_SOCKET_URL || 'http://saas-backend:4000');
@@ -633,6 +637,38 @@ async function doManualLogin(
 
 // ─── Session Validation ───────────────────────────────────────────────────────
 
+/**
+ * Dismiss any interstitial popups that may appear (Unlock more on X, etc.)
+ */
+async function dismissPopups(page: Page, emitLog: (msg: string) => void): Promise<void> {
+    try {
+        // "Unlock more on X" / "Got it" button
+        const gotItBtn = page.locator('button:has-text("Got it"), span:has-text("Got it"), div[role="button"]:has-text("Got it")').first();
+        if (await gotItBtn.isVisible({ timeout: 2500 }).catch(() => false)) {
+            emitLog("💡 Popup 'Unlock more on X' détectée — fermeture...");
+            await humanClick(page, gotItBtn);
+            await sleep(1000);
+        }
+
+        // "Not now" links
+        const notNowBtn = page.locator('a:has-text("Not now"), span:has-text("Not now")').first();
+        if (await notNowBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+            emitLog("💡 Popup 'Not now' détectée — fermeture...");
+            await humanClick(page, notNowBtn);
+            await sleep(800);
+        }
+
+        // "Close" dialogs with X button (aria-label="Close")
+        const closeBtn = page.locator('[aria-label="Close"], [data-testid="app-bar-close"]').first();
+        if (await closeBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+            await humanClick(page, closeBtn);
+            await sleep(800);
+        }
+    } catch (_) {
+        // Popups optional — never block execution
+    }
+}
+
 async function validateSession(page: Page, emitLog: (msg: string) => void): Promise<boolean> {
     try {
         emitLog("🔄 Vérification de la session existante...");
@@ -980,6 +1016,224 @@ async function doAutoComment(page: Page, emitLog: (msg: string) => void, config:
     }
 
     emitLog(`✅ Auto-Comment completed: ${commented} comments posted naturally.`);
+}
+
+// ─── Update Profile ────────────────────────────────────────────────────────────
+
+async function doUpdateProfile(page: Page, emitLog: (msg: string) => void, config: any) {
+    emitLog("🪪 Début de la mise à jour (Photos + Bio)...");
+
+    // Helper: download an image URL to a temp file
+    const downloadImage = async (url: string, filename: string): Promise<string | null> => {
+        try {
+            // Fix localhost URL if worker is in docker and backend is saas-backend
+            let finalUrl = url;
+            if (url.includes('localhost') && process.env.BACKEND_INTERNAL_URL) {
+                finalUrl = url.replace('http://localhost:4000', process.env.BACKEND_INTERNAL_URL);
+            }
+
+            const tmpPath = path.join('/tmp', `twitter_${filename}_${Date.now()}.jpg`);
+            const protocol = finalUrl.startsWith('https') ? https : http;
+
+            emitLog(`📡 Téléchargement ${filename} depuis ${finalUrl}...`);
+
+            return new Promise<string | null>((resolve) => {
+                const timeout = setTimeout(() => {
+                    emitLog(`⚠️ Timeout (15s) de téléchargement pour ${filename}`);
+                    resolve(null);
+                }, 15000);
+
+                const file = fs.createWriteStream(tmpPath);
+                protocol.get(finalUrl, (response: any) => {
+                    if (response.statusCode === 301 || response.statusCode === 302) {
+                        const newUrl = response.headers.location;
+                        if (!newUrl) { resolve(null); return; }
+                        (newUrl.startsWith('https') ? https : http).get(newUrl, (res2: any) => {
+                            res2.pipe(file);
+                            file.on('finish', () => { clearTimeout(timeout); file.close(); resolve(tmpPath); });
+                        }).on('error', () => { clearTimeout(timeout); resolve(null); });
+                        return;
+                    }
+
+                    if (response.statusCode !== 200) {
+                        emitLog(`⚠️ Erreur HTTP ${response.statusCode} pour ${filename}`);
+                        clearTimeout(timeout);
+                        resolve(null);
+                        return;
+                    }
+
+                    response.pipe(file);
+                    file.on('finish', () => { 
+                        clearTimeout(timeout); 
+                        file.close(); 
+                        resolve(tmpPath); 
+                    });
+                }).on('error', (err: any) => { 
+                    clearTimeout(timeout); 
+                    emitLog(`⚠️ Erreur réseau download ${filename}: ${err.message}`);
+                    resolve(null); 
+                });
+            }).catch((err) => {
+                emitLog(`⚠️ Exception Promise download: ${err.message}`);
+                return null;
+            });
+        } catch (e: any) {
+            emitLog(`⚠️ Erreur fatale téléchargement image: ${e.message}`);
+            return null;
+        }
+    };
+
+    // Navigate to the profile
+    const username = config.username;
+    emitLog(`🌐 Navigation vers le profil de @${username}...`);
+    await page.goto(`https://x.com/${username}`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(e => {
+        emitLog(`⚠️ Navigation domcontentloaded timeout: ${e.message}`);
+    });
+    await sleep(randomRange(3000, 5000));
+    
+    // Dismiss any popups
+    await dismissPopups(page, emitLog);
+
+    // Click "Edit profile" button on profile page
+    emitLog("🔍 Recherche du bouton 'Edit profile'...");
+    const editProfileBtn = page.locator('a[href="/settings/profile"], [data-testid="editProfileButton"]').first();
+    if (await editProfileBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+        emitLog("🖱️ Clic sur 'Edit profile'...");
+        await humanClick(page, editProfileBtn);
+        await sleep(3000);
+    } else {
+        emitLog("⚠️ Bouton non trouvé, navigation directe vers /settings/profile...");
+        await page.goto('https://x.com/settings/profile', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+        await sleep(3000);
+    }
+
+    try {
+        // --- Upload Banner Image ---
+        if (config?.bannerImage && config.bannerImage.startsWith('http')) {
+            emitLog("🖼️ Traitement de la bannière...");
+            const bannerPath = await downloadImage(config.bannerImage, 'banner');
+            if (bannerPath) {
+                emitLog("📤 Injection du fichier bannière...");
+                const bannerInput = page.locator('input[type="file"]').first();
+                await bannerInput.setInputFiles(bannerPath).catch(() => {});
+                
+                await sleep(5000); 
+                
+                const applyBtn = page.locator('[data-testid="applyButton"], button:has-text("Apply"), button:has-text("Appliquer")').first();
+                emitLog("🔍 Attente du bouton de validation (Apply)...");
+                // Correct way to wait for visibility with timeout
+                await applyBtn.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+
+                if (await applyBtn.isVisible().catch(() => false)) {
+                    emitLog("✅ Validation du recadrage bannière...");
+                    await humanClick(page, applyBtn);
+                    // Wait for the crop modal to disappear
+                    await applyBtn.waitFor({ state: 'hidden', timeout: 30000 }).catch(() => {});
+                    await sleep(5000); // Wait for the main modal to be interactable again
+                } else {
+                    emitLog("⚠️ Bouton 'Apply' non visible pour la bannière. Skip recadrage.");
+                }
+                if (fs.existsSync(bannerPath)) fs.unlinkSync(bannerPath);
+            }
+        }
+
+        // --- Upload Profile Photo ---
+        if (config?.profileImage && config.profileImage.startsWith('http')) {
+            emitLog("📷 Traitement de la photo de profil...");
+            const photoPath = await downloadImage(config.profileImage, 'profile');
+            if (photoPath) {
+                // Ensure no other modal is open
+                await page.locator('[data-testid="applyButton"]').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+                
+                emitLog("📤 Injection du fichier photo de profil...");
+                // The profile photo input is often the one inside the profilePhotoUpload container
+                const photoInput = page.locator('[data-testid="profilePhotoUpload"] input[type="file"]').last();
+                if (await photoInput.count() === 0) {
+                    emitLog("🔍 Sélecteur spécifique échoué, tentative via second input...");
+                    const allInputs = await page.locator('input[type="file"]').all();
+                    if (allInputs.length > 1) await allInputs[1].setInputFiles(photoPath).catch(() => {});
+                    else if (allInputs.length > 0) await allInputs[0].setInputFiles(photoPath).catch(() => {});
+                } else {
+                    await photoInput.setInputFiles(photoPath).catch(() => {});
+                }
+
+                await sleep(5000);
+                
+                const applyBtn = page.locator('[data-testid="applyButton"], button:has-text("Apply"), button:has-text("Appliquer")').first();
+                emitLog("🔍 Attente du bouton de validation (Apply)...");
+                await applyBtn.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+
+                if (await applyBtn.isVisible().catch(() => false)) {
+                    emitLog("✅ Validation du recadrage photo...");
+                    await humanClick(page, applyBtn);
+                    await applyBtn.waitFor({ state: 'hidden', timeout: 30000 }).catch(() => {});
+                    await sleep(5000);
+                } else {
+                    emitLog("⚠️ Bouton 'Apply' non visible pour la photo. Skip recadrage.");
+                }
+                if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
+            }
+        }
+
+        // --- Update Bio ---
+        if (config?.bio) {
+            emitLog(`✍️ Saisie de la bio...`);
+            const bioField = page.locator('textarea[name="description"]').first();
+            await bioField.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+            
+            if (await bioField.isVisible().catch(() => false)) {
+                await bioField.click();
+                await page.keyboard.press('Control+a');
+                await sleep(800);
+                await page.keyboard.press('Backspace');
+                await bioField.fill(''); // Safety
+                await humanType(page, 'textarea[name="description"]', config.bio);
+                await sleep(2000);
+            } else {
+                emitLog("⚠️ Champ bio non trouvé ou encore masqué par une modale.");
+            }
+        }
+
+        // --- Update Name ---
+        if (config?.displayName) {
+            emitLog(`📝 Saisie du nom: ${config.displayName}`);
+            const nameField = page.locator('input[name="displayName"]').first();
+            if (await nameField.isVisible().catch(() => false)) {
+                await nameField.click();
+                await page.keyboard.press('Control+KeyA');
+                await page.keyboard.press('Backspace');
+                await nameField.fill(config.displayName);
+            }
+        }
+
+        await sleep(2000);
+
+        // --- Save All ---
+        emitLog("💾 Enregistrement final des modifications...");
+        const saveBtn = page.locator('[data-testid="Profile_Save_Button"]').first();
+        if (await saveBtn.isVisible().catch(() => false)) {
+            await humanClick(page, saveBtn);
+            emitLog("⏳ Attente de confirmation de Twitter...");
+            await sleep(6000);
+            emitLog("✅ Profil mis à jour avec succès !");
+        } else {
+            emitLog("⚠️ Bouton 'Save' non trouvé. Tentative de sortie...");
+        }
+
+        // --- Update in DB ---
+        if (config?.niche || config?.bio) {
+            await prisma.twitterAccount.update({
+                where: { username: config.username },
+                data: {
+                    ...(config.bio && { bio: config.bio }),
+                    ...(config.niche && { niche: config.niche }),
+                }
+            }).catch((e: any) => emitLog(`⚠️ Erreur synchro DB: ${e.message}`));
+        }
+
+    } catch (e: any) {
+        emitLog(`❌ Erreur fatale update: ${e.message}`);
+    }
 }
 
 // ─── Auto Post ────────────────────────────────────────────────────────────────
@@ -1573,6 +1827,16 @@ export const twitterWorkerHandler = async (job: any) => {
             case 'postCommunity':
                 const communityPostResult = await doAutoPost(page, emitLog, config, username);
                 if (communityPostResult?.postUrl) job.data.postUrl = communityPostResult.postUrl;
+                break;
+            case 'updateProfile':
+                await doUpdateProfile(page, emitLog, {
+                    ...config,
+                    username,
+                    bio: config?.bio || account.bio,
+                    niche: config?.niche || account.niche,
+                    profileImage: config?.profileImage || account.profileImage,
+                    bannerImage: config?.bannerImage || account.bannerImage,
+                });
                 break;
             default:
                 emitLog(`⚠️ Action inconnue : ${action}`);
