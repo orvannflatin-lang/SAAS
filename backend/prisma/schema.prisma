@@ -240,7 +240,8 @@ model GlobalSettings {
   id                    String   @id @default(uuid())
   userId                String   @unique
   user                  User     @relation(fields: [userId], references: [id])
-  postsPerDayLimit      Int      @default(3)
+  postIntervalValue     Int      @default(30)
+  postIntervalUnit      String   @default("MINUTES")
   commentsPerPostLimit  Int      @default(5)
   followPerDayLimit     Int      @default(20)
   autoSyncMetadata      Boolean  @default(true)
