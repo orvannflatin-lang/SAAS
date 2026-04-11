@@ -13,33 +13,43 @@ const twitterQueue = new Queue('twitter-actions', { connection: redisConnection 
  * The Ghost Mastermind Orchestrator
  * Manages autonomous behavior for all accounts in Global Pools.
  */
-export const startOrchestrator = () => {
-    // Run every 15 minutes
-    cron.schedule('*/15 * * * *', async () => {
-        console.log('🤖 Orchestrator: Starting global autonomous cycle...');
-        
-        try {
-            // Find all active accounts with autoMode enabled
-            const accounts = await prisma.twitterAccount.findMany({
-                where: { 
-                    autoMode: true, 
-                    status: 'ACTIVE' 
-                }
-            });
+let isOrchestratorRunning = false;
 
-            console.log(`🤖 Orchestrator: Found ${accounts.length} accounts in Auto-Mode.`);
+export const executeGlobalCycle = async () => {
+    console.log('🤖 Orchestrator: Starting global autonomous cycle...');
+    try {
+        const accounts = await prisma.twitterAccount.findMany({
+            where: { autoMode: true, status: 'ACTIVE' }
+        });
 
-            for (const account of accounts) {
-                if (account.type === 'MAIN') {
-                    await handleMainAutomation(account);
-                } else if (account.type === 'SUPPORT') {
-                    await handleSupportAutomation(account);
-                }
+        console.log(`🤖 Orchestrator: Found ${accounts.length} accounts in Auto-Mode.`);
+
+        for (const account of accounts) {
+            if (account.type === 'MAIN') {
+                await handleMainAutomation(account);
+            } else if (account.type === 'SUPPORT') {
+                await handleSupportAutomation(account);
             }
-        } catch (error) {
-            console.error('❌ Orchestrator Error:', error);
         }
-    });
+    } catch (error) {
+        console.error('❌ Orchestrator Error:', error);
+    }
+};
+
+export const startOrchestrator = () => {
+    if (isOrchestratorRunning) {
+        // If it's already running, just trigger an immediate cycle manually instead of duplicate crons
+        executeGlobalCycle();
+        return;
+    }
+    
+    isOrchestratorRunning = true;
+    
+    // Execute cycle immediately when initialized
+    executeGlobalCycle();
+
+    // Then schedule to run every 15 minutes
+    cron.schedule('*/15 * * * *', executeGlobalCycle);
 
     console.log('✅ Global Orchestrator initialized and listening.');
 };

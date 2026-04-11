@@ -2457,7 +2457,7 @@ function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index,
                     </div>
                     <div className="flex flex-wrap gap-1 mt-1">
                         <button 
-                            onClick={(e) => { e.stopPropagation(); (window as any).toggleAutoMode(account.id, !!account.autoMode); }}
+                            onClick={(e) => { e.stopPropagation(); toggleAutoMode(account.id, !!account.autoMode); }}
                             className={`text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border transition-all ${
                                 account.autoMode 
                                 ? 'bg-blue-600 text-white border-blue-400' 
@@ -2467,7 +2467,7 @@ function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index,
                             {account.autoMode ? 'Auto ON' : 'Auto OFF'}
                         </button>
                         <button 
-                            onClick={(e) => { e.stopPropagation(); (window as any).syncMetadata(account.id); }}
+                            onClick={(e) => { e.stopPropagation(); syncMetadata(account.id); }}
                             className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border bg-white/5 text-white/40 border-white/10 hover:bg-violet-500/20 hover:text-violet-300 hover:border-violet-500/30 transition-all flex items-center gap-1"
                             title="Synchronize Metadata"
                         >
