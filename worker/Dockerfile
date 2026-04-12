@@ -24,8 +24,8 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Enable development mode
-ENV NODE_ENV development
+# Enable production mode
+ENV NODE_ENV production
 
 COPY package*.json ./
 RUN npm install
@@ -33,9 +33,13 @@ RUN npm install
 # Install Playwright browsers (Chromium)
 RUN npx playwright install chromium --with-deps
 
+# Copy source code
 COPY . .
 
 # Generate Prisma Client
 RUN npx prisma generate
 
-CMD ["xvfb-run", "--server-args=-screen 0 1280x1024x24", "npm", "run", "dev"]
+# Build the application
+RUN npm run build
+
+CMD ["xvfb-run", "--server-args=-screen 0 1280x1024x24", "npm", "start"]
