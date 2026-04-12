@@ -24,9 +24,7 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Enable production mode
-ENV NODE_ENV production
-
+# Install ALL dependencies first (including devDependencies like tsc)
 COPY package*.json ./
 RUN npm install
 
@@ -39,7 +37,10 @@ COPY . .
 # Generate Prisma Client
 RUN npx prisma generate
 
-# Build the application
+# Build the application (tsc is now available)
 RUN npm run build
+
+# Set production mode ONLY after build
+ENV NODE_ENV production
 
 CMD ["xvfb-run", "--server-args=-screen 0 1280x1024x24", "npm", "start"]
