@@ -78,6 +78,7 @@ interface Account {
     niche?: string;
     groupId?: string;
     autoMode?: boolean;
+    sessionCookies?: any;
 }
 
 interface Group {

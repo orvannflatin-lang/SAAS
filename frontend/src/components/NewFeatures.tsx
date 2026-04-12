@@ -66,6 +66,7 @@ interface Account {
     bio?: string;
     niche?: string;
     groupId?: string;
+    sessionCookies?: any;
 }
 
 
