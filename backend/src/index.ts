@@ -35,7 +35,8 @@ const twitterQueue = new Queue('twitter-actions', { connection: redisConnection 
 // HTTP & Socket.io Server
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-    cors: { origin: "*", methods: ["GET", "POST"] }
+    cors: { origin: "*", methods: ["GET", "POST"] },
+    transports: ['websocket']
 });
 
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -1194,15 +1195,16 @@ app.get('/api/campaigns', authenticateToken, async (req: AuthRequest, res) => {
  * Create a new campaign
  */
 app.post('/api/campaigns', authenticateToken, async (req: AuthRequest, res) => {
-    const { name, description, postsPerAccount, commentsPerPost, totalCommentsQuota, targetCommunities } = req.body;
+    const { name, description, type, postsPerAccount, commentsPerPost, totalCommentsQuota, targetCommunities } = req.body;
     const userId = req.user?.id || 'temp-user-id';
     try {
         const campaign = await prisma.campaign.create({
             data: {
                 name,
                 description,
+                type: type === 'WARMUP' ? 'WARMUP' : 'POST',
                 userId,
-                groupId: req.body.groupId || null,
+                groupId: type === 'WARMUP' ? null : (req.body.groupId || null),
                 postsPerAccount: postsPerAccount !== undefined ? parseInt(postsPerAccount) : 3,
                 commentsPerPost: commentsPerPost !== undefined ? parseInt(commentsPerPost) : 5,
                 totalCommentsQuota: totalCommentsQuota !== undefined ? parseInt(totalCommentsQuota) : 50,
@@ -1220,19 +1222,22 @@ app.post('/api/campaigns', authenticateToken, async (req: AuthRequest, res) => {
  */
 app.patch('/api/campaigns/:id', authenticateToken, async (req: AuthRequest, res) => {
     const { id } = req.params;
-    const { name, description, postsPerAccount, commentsPerPost, totalCommentsQuota, targetCommunities, isActive } = req.body;
+    const { name, description, type, postsPerAccount, commentsPerPost, totalCommentsQuota, targetCommunities, isActive } = req.body;
     try {
         const campaign = await prisma.campaign.update({
             where: { id },
             data: {
                 ...(name && { name }),
                 ...(description !== undefined && { description }),
+                ...(type !== undefined && { type }),
                 ...(postsPerAccount !== undefined && { postsPerAccount: parseInt(postsPerAccount) }),
                 ...(commentsPerPost !== undefined && { commentsPerPost: parseInt(commentsPerPost) }),
                 ...(totalCommentsQuota !== undefined && { totalCommentsQuota: parseInt(totalCommentsQuota) }),
                 ...(targetCommunities !== undefined && { targetCommunities }),
                 ...(isActive !== undefined && { isActive }),
-                ...(req.body.groupId !== undefined && { groupId: req.body.groupId })
+                ...(type === 'WARMUP'
+                    ? { groupId: null }
+                    : (req.body.groupId !== undefined && { groupId: req.body.groupId }))
             }
         });
         res.json(campaign);
@@ -1246,7 +1251,7 @@ app.patch('/api/campaigns/:id', authenticateToken, async (req: AuthRequest, res)
  */
 app.post('/api/campaigns/:id/toggle', authenticateToken, async (req: AuthRequest, res) => {
     const { id } = req.params;
-    const { isActive, intervalValue, intervalUnit } = req.body;
+    const { isActive, intervalValue, intervalUnit, warmupDurationValue, warmupDurationUnit, warmupFrequencyPerHour } = req.body;
     const userId = req.user?.id;
 
     if (!userId) return res.status(401).json({ error: 'Non authentifié' });
@@ -1257,22 +1262,65 @@ app.post('/api/campaigns/:id/toggle', authenticateToken, async (req: AuthRequest
         });
         if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
 
+        const isWarmupCampaign = campaign.type === 'WARMUP';
+        const frequencyPerHour = Math.max(1, parseInt(warmupFrequencyPerHour, 10) || 1);
+        const warmupIntervalMinutes = Math.max(1, Math.floor(60 / frequencyPerHour));
+
         // Update campaign settings
         const updatedCampaign = await prisma.campaign.update({
             where: { id },
             data: { 
                 isActive,
-                ...(intervalValue !== undefined && { postIntervalValue: parseInt(intervalValue, 10) }),
-                ...(intervalUnit !== undefined && { postIntervalUnit: intervalUnit })
+                ...(isWarmupCampaign
+                    ? {
+                        postIntervalValue: warmupIntervalMinutes,
+                        postIntervalUnit: 'MINUTES'
+                    }
+                    : {
+                        ...(intervalValue !== undefined && { postIntervalValue: parseInt(intervalValue, 10) }),
+                        ...(intervalUnit !== undefined && { postIntervalUnit: intervalUnit })
+                    })
             }
         });
 
-        // Toggle accounts in this group
-        if (updatedCampaign.groupId) {
-             await prisma.twitterAccount.updateMany({
-                 where: { groupId: updatedCampaign.groupId },
-                 data: { autoMode: isActive }
-             });
+        // Toggle account auto mode based on campaign type/scope
+        if (isWarmupCampaign) {
+            await prisma.twitterAccount.updateMany({
+                where: { userId, type: 'MAIN' },
+                data: { autoMode: isActive }
+            });
+        } else if (updatedCampaign.groupId) {
+            await prisma.twitterAccount.updateMany({
+                where: { groupId: updatedCampaign.groupId },
+                data: { autoMode: isActive }
+            });
+        }
+
+        // Warmup campaigns: immediately queue warmup on all MAIN accounts
+        if (isActive && isWarmupCampaign) {
+            const warmupTargets = await prisma.twitterAccount.findMany({
+                where: {
+                    userId,
+                    type: 'MAIN'
+                }
+            });
+
+            const durationValue = Math.max(1, parseInt(warmupDurationValue, 10) || 90);
+            const durationUnit = warmupDurationUnit === 'MINUTES' ? 'MINUTES' : 'SECONDS';
+            const warmupDurationSeconds = durationUnit === 'MINUTES' ? durationValue * 60 : durationValue;
+
+            for (const account of warmupTargets) {
+                await twitterQueue.add(`campaign-warmup-${account.username}-${Date.now()}`, {
+                    accountId: account.id,
+                    action: 'warmUp',
+                    username: account.username,
+                    campaignId: updatedCampaign.id,
+                    config: {
+                        durationSeconds: warmupDurationSeconds,
+                        frequencyPerHour
+                    }
+                });
+            }
         }
 
         if (isActive) {

@@ -220,9 +220,10 @@ model Notification {
 }
 
 model Campaign {
-  id          String            @id @default(uuid())
-  name        String
-  description String?
+  id                 String            @id @default(uuid())
+  name               String
+  description        String?
+  type               String            @default("POST")
   isActive           Boolean           @default(true)
   postIntervalValue  Int               @default(30)
   postIntervalUnit   String            @default("MINUTES")

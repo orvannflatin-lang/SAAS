@@ -38,29 +38,37 @@ export const executeGlobalCycle = async () => {
         }
 
         for (const campaign of campaigns) {
-            // Find MAIN accounts for this campaign group
+            // Find MAIN accounts for this campaign scope
             const mainAccounts = await prisma.twitterAccount.findMany({
                 where: { 
-                    groupId: campaign.groupId,
+                    ...(campaign.type === 'WARMUP'
+                        ? { userId: campaign.userId }
+                        : (campaign.groupId ? { groupId: campaign.groupId } : { userId: campaign.userId })),
                     type: 'MAIN',
                     autoMode: true
                 }
             });
 
             for (const account of mainAccounts) {
-                await handleMainAutomation(account, campaign);
+                if (campaign.type === 'WARMUP') {
+                    await handleMainWarmupAutomation(account, campaign);
+                } else {
+                    await handleMainAutomation(account, campaign);
+                }
             }
 
-            // Passive support automation for this group
-            const supportAccounts = await prisma.twitterAccount.findMany({
-                where: {
-                    groupId: campaign.groupId,
-                    type: 'SUPPORT',
-                    autoMode: true
+            // Passive support automation only for POST campaigns
+            if (campaign.type !== 'WARMUP') {
+                const supportAccounts = await prisma.twitterAccount.findMany({
+                    where: {
+                        ...(campaign.groupId ? { groupId: campaign.groupId } : { userId: campaign.userId }),
+                        type: 'SUPPORT',
+                        autoMode: true
+                    }
+                });
+                for (const support of supportAccounts) {
+                    await handleSupportAutomation(support);
                 }
-            });
-            for (const support of supportAccounts) {
-                await handleSupportAutomation(support);
             }
         }
     } catch (error) {
@@ -131,6 +139,48 @@ async function handleMainAutomation(account: any, campaign: any) {
         }
     } catch (error) {
         console.error(`❌ Error in handleMainAutomation for ${account.username}:`, error);
+    }
+}
+
+async function handleMainWarmupAutomation(account: any, campaign: any) {
+    try {
+        const lastWarmup = await prisma.activityLog.findFirst({
+            where: {
+                accountId: account.id,
+                action: 'warmUp',
+                status: 'SUCCESS'
+            },
+            orderBy: { timestamp: 'desc' }
+        });
+
+        let canWarmup = true;
+        if (lastWarmup) {
+            const now = new Date();
+            const lastWarmupTime = new Date(lastWarmup.timestamp);
+            const diffMs = now.getTime() - lastWarmupTime.getTime();
+            const intervalMs = campaign.postIntervalUnit === 'HOURS'
+                ? campaign.postIntervalValue * 60 * 60 * 1000
+                : campaign.postIntervalValue * 60 * 1000;
+
+            if (diffMs < intervalMs) {
+                canWarmup = false;
+            }
+        }
+
+        if (canWarmup) {
+            await twitterQueue.add(`campaign-warmup-${account.username}-${Date.now()}`, {
+                accountId: account.id,
+                action: 'warmUp',
+                username: account.username,
+                campaignId: campaign.id,
+                config: {
+                    durationSeconds: campaign.postIntervalValue ? Math.max(30, Math.min(1800, campaign.postIntervalValue * 60)) : 120,
+                    frequencyPerHour: Math.max(1, Math.floor(60 / Math.max(1, campaign.postIntervalValue || 30)))
+                }
+            }, { attempts: 2, backoff: { type: 'exponential', delay: 10000 } });
+        }
+    } catch (error) {
+        console.error(`❌ Error in handleMainWarmupAutomation for ${account.username}:`, error);
     }
 }
 
