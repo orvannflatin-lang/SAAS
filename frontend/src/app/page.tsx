@@ -366,7 +366,11 @@ export default function Dashboard() {
     }, [platform]);
 
     useEffect(() => {
-        const socket = io(SOCKET_URL);
+        const socket = io(SOCKET_URL, {
+            transports: ['websocket'],
+            reconnectionAttempts: 5,
+            timeout: 10000
+        });
         
         socket.on('ui_log', (data) => setLogs((prev) => [
             {...data, timestamp: new Date()}, 
@@ -1023,7 +1027,7 @@ export default function Dashboard() {
                                             key={acc.id} 
                                             account={acc} 
                                             active={activeAccount === acc.id}
-                                            onClick={() => setActiveAccount(acc.id)}
+                                            onClick={() => { setActiveAccount(acc.username); setViewMode('SINGLE'); }}
                                             onLaunch={(action) => launchAction(acc.id, action)}
                                             onEditProfile={() => {
                                                 setSelectedAccount(acc);

@@ -36,7 +36,11 @@ const debugLog = (msg: string) => {
 
 const HEADLESS = process.env.HEADLESS !== 'false'; // Default to true unless explicitly false
 const prisma = new PrismaClient();
-const socket = io(process.env.BACKEND_SOCKET_URL || 'http://saas-backend:4000');
+const socket = io(process.env.BACKEND_SOCKET_URL || 'http://saas-backend:4000', {
+    transports: ['websocket'],
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000
+});
 
 debugLog("👷 Worker starting up...");
 

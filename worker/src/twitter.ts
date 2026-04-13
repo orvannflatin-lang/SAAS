@@ -24,7 +24,11 @@ const debugLog = (msg: string) => {
 };
 
 const prisma = new PrismaClient();
-const socket = io(process.env.BACKEND_SOCKET_URL || 'http://saas-backend:4000');
+const socket = io(process.env.BACKEND_SOCKET_URL || 'http://saas-backend:4000', {
+    transports: ['websocket'],
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000
+});
 
 socket.on('connect', () => {
     debugLog(`✅ [Twitter Handler] Socket connected to backend: ${socket.id}`);
@@ -313,12 +317,14 @@ async function createStealthSession(
 
     // Launch browser with stealth args
     emitLog("🚀 Initialisation de la session furtive...");
-    const isHeadless = process.env.HEADLESS !== 'false'; // Default to true unless explicitly false
+    const isHeadless = true; 
+    emitLog(`DEBUG: isHeadless forced to ${isHeadless} (Env HEADLESS was: ${process.env.HEADLESS})`);
     
     const browser = await chromium.launch({
         headless: isHeadless,
         proxy: proxyConfig,
         args: [
+            '--headless=new', // Explicit headless flag
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
