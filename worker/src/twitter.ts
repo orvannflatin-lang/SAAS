@@ -855,6 +855,18 @@ async function dismissPopups(page: Page, emitLog: (msg: string) => void): Promis
     }
 }
 
+/**
+ * Après `goto` sur une URL communauté, X peut afficher tout de suite le modal « Check it out »
+ * (Welcome to Communities) ou les règles — avant même Join. Plusieurs passes pour laisser le temps au rendu.
+ */
+async function dismissCommunityLoadOverlays(page: Page, emitLog: (msg: string) => void): Promise<void> {
+    emitLog('💡 Popups au chargement de la page communauté (Welcome, règles, etc.)…');
+    for (let w = 0; w < 6; w++) {
+        await dismissPopups(page, emitLog);
+        await sleep(randomRange(800, 1400));
+    }
+}
+
 async function validateSession(page: Page, emitLog: (msg: string) => void): Promise<boolean> {
     emitLog("🔄 Vérification de la session existante...");
     
@@ -2043,7 +2055,8 @@ async function doJoinCommunity(page: Page, emitLog: (msg: string) => void, confi
         emitLog(`👥 Join Community : Direct join via URL: ${config.url}`);
         await page.goto(config.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
         await sleep(randomRange(3000, 5000));
-        
+        await dismissCommunityLoadOverlays(page, emitLog);
+
         // Look for Join button
         const joinBtn = page.locator('button:has-text("Join"), button:has-text("Rejoindre")').first();
         if (await joinBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -2136,7 +2149,7 @@ async function ensureJoinCommunityIfNeeded(
     try {
         await page.goto(communityPageUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await sleep(randomRange(2500, 4500));
-        await dismissPopups(page, emitLog);
+        await dismissCommunityLoadOverlays(page, emitLog);
 
         const joinBtn = page
             .locator(
