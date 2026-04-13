@@ -730,6 +730,51 @@ async function doManualLogin(
 // ─── Session Validation ───────────────────────────────────────────────────────
 
 /**
+ * Modal d’onboarding X « Welcome to Communities » (bouton « Check it out », etc.)
+ * Apparaît souvent juste après avoir rejoint une communauté.
+ */
+async function dismissCommunitiesWelcomeModal(page: Page, emitLog: (msg: string) => void): Promise<void> {
+    try {
+        const primaryCta = page
+            .locator(
+                [
+                    'button:has-text("Check it out")',
+                    '[role="button"]:has-text("Check it out")',
+                    'div[role="button"]:has-text("Check it out")',
+                    'button:has-text("Découvrir")',
+                    'button:has-text("Commencer")',
+                    'button:has-text("OK")',
+                ].join(', ')
+            )
+            .first();
+
+        if (await primaryCta.isVisible({ timeout: 2800 }).catch(() => false)) {
+            emitLog('💡 Modal « Welcome to Communities » — clic sur le bouton principal…');
+            await humanClick(page, primaryCta);
+            await sleep(randomRange(1500, 2800));
+            return;
+        }
+
+        const dialog = page
+            .locator('[role="dialog"]')
+            .filter({ hasText: /Welcome to Communities|Communities on X|Les Communautés sur X/i });
+        if (await dialog.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+            const innerBtn = dialog
+                .locator('button, [role="button"]')
+                .filter({ hasText: /Check it out|Découvrir|Got it|C'est parti|OK/i })
+                .first();
+            if (await innerBtn.isVisible({ timeout: 2500 }).catch(() => false)) {
+                emitLog('💡 Dialogue communautés — fermeture (CTA dans le dialog)…');
+                await humanClick(page, innerBtn);
+                await sleep(randomRange(1500, 2800));
+            }
+        }
+    } catch {
+        // optionnel
+    }
+}
+
+/**
  * Dismiss any interstitial popups that may appear (Unlock more on X, etc.)
  */
 async function dismissPopups(page: Page, emitLog: (msg: string) => void): Promise<void> {
@@ -756,6 +801,8 @@ async function dismissPopups(page: Page, emitLog: (msg: string) => void): Promis
             await humanClick(page, closeBtn);
             await sleep(800);
         }
+
+        await dismissCommunitiesWelcomeModal(page, emitLog);
     } catch (_) {
         // Popups optional — never block execution
     }
@@ -1955,10 +2002,16 @@ async function doJoinCommunity(page: Page, emitLog: (msg: string) => void, confi
         if (await joinBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
             await humanClick(page, joinBtn);
             emitLog("✅ Community join button clicked.");
-            await sleep(2000);
+            await sleep(randomRange(2500, 4000));
+            for (let w = 0; w < 5; w++) {
+                await dismissCommunitiesWelcomeModal(page, emitLog);
+                await dismissPopups(page, emitLog);
+                await sleep(1200);
+            }
         } else {
             emitLog("ℹ️ Join button not visible. Already a member?");
         }
+        await dismissCommunitiesWelcomeModal(page, emitLog);
         return;
     }
 
@@ -2053,10 +2106,18 @@ async function ensureJoinCommunityIfNeeded(
             const label = (await joinBtn.innerText().catch(() => '')) || 'join';
             await humanClick(page, joinBtn);
             emitLog(`✅ Adhésion demandée / cliquée (${label.trim().slice(0, 48)})`);
-            await sleep(randomRange(3000, 6000));
-            await dismissPopups(page, emitLog);
+            await sleep(randomRange(2800, 5000));
+            for (let w = 0; w < 6; w++) {
+                await dismissCommunitiesWelcomeModal(page, emitLog);
+                await dismissPopups(page, emitLog);
+                await sleep(1200);
+            }
         } else {
             emitLog('ℹ️ Aucun bouton Join visible — souvent déjà membre ou UI différente ; on tente le post.');
+        }
+        for (let w = 0; w < 3; w++) {
+            await dismissCommunitiesWelcomeModal(page, emitLog);
+            await sleep(800);
         }
     } catch (e: any) {
         emitLog(`⚠️ Étape join communauté: ${e.message?.split('\n')[0] || e} — on tente quand même le post.`);
