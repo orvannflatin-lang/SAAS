@@ -34,7 +34,7 @@ const debugLog = (msg: string) => {
     console.log(msg);
 };
 
-const HEADLESS = true;
+const HEADLESS = process.env.HEADLESS !== 'false'; // Default to true unless explicitly false
 const prisma = new PrismaClient();
 const socket = io(process.env.BACKEND_SOCKET_URL || 'http://saas-backend:4000');
 
