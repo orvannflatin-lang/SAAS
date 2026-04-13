@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { API_BASE_URL } from '@/utils/apiConfig';
 
 type LinkCastData = {
   slug: string;
@@ -6,15 +7,38 @@ type LinkCastData = {
   targetUrl: string;
 };
 
+function normalizeBaseUrl(raw: string): string {
+  const withProtocol = raw.startsWith('http') ? raw : `https://${raw}`;
+  return withProtocol.replace(/\/$/, '').replace(/\/api$/, '');
+}
+
 async function getLinkCast(slug: string): Promise<LinkCastData | null> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const hardcodedBackendFallback = 'https://faithful-surprise-production-3d52.up.railway.app';
+  const candidates = [
+    process.env.BACKEND_PUBLIC_URL,
+    process.env.NEXT_PUBLIC_API_URL,
+    API_BASE_URL,
+    hardcodedBackendFallback,
+    process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : undefined
+  ]
+    .filter((value): value is string => Boolean(value))
+    .map(normalizeBaseUrl);
+
   try {
-    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/link-cast/${slug}`, { cache: 'no-store' });
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
+    for (const baseUrl of candidates) {
+      const endpoint = `${baseUrl}/api/link-cast/${slug}`;
+      try {
+        const res = await fetch(endpoint, { cache: 'no-store' });
+        if (res.ok) return res.json();
+        console.error(`[link-cast] ${res.status} on ${endpoint}`);
+      } catch (error) {
+        console.error(`[link-cast] fetch failed on ${endpoint}`, error);
+      }
+    }
+  } catch (error) {
+    console.error('[link-cast] unexpected error', error);
   }
+  return null;
 }
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {

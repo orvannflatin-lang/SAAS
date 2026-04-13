@@ -1,6 +1,10 @@
 // Centralized API Configuration
+function normalizeBaseUrl(rawUrl: string): string {
+  const withProtocol = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+  return withProtocol.replace(/\/$/, '').replace(/\/api$/, '');
+}
+
 const rawUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-// Ensure protocol and remove trailing slash
-export const API_BASE_URL = (rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`).replace(/\/$/, '');
+export const API_BASE_URL = normalizeBaseUrl(rawUrl);
 export const API_URL = `${API_BASE_URL}/api`;
 export const SOCKET_URL = API_BASE_URL;
