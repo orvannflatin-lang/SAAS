@@ -735,19 +735,8 @@ async function doManualLogin(
  */
 async function dismissCommunityRulesModal(page: Page, emitLog: (msg: string) => void): Promise<void> {
     try {
-        const agreePrimary = page
-            .locator(
-                [
-                    'button:has-text("Agree and join")',
-                    '[role="button"]:has-text("Agree and join")',
-                    'div[role="button"]:has-text("Agree and join")',
-                    'button:has-text("Accepter et rejoindre")',
-                    'button:has-text("Accept and join")',
-                    'button:has-text("I agree")',
-                    'button:has-text("J\'accepte")',
-                ].join(', ')
-            )
-            .first();
+        // X mobile UI often avoids standard button roles for top-right headers. We look for any element containing the text.
+        const agreePrimary = page.getByText(/Agree and join|Accepter et rejoindre|Accept and join|I agree|J'accepte/i).first();
 
         if (await agreePrimary.isVisible({ timeout: 2800 }).catch(() => false)) {
             emitLog('💡 Modal des règles de la communauté — validation (Agree and join)…');
