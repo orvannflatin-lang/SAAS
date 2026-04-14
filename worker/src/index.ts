@@ -232,7 +232,7 @@ const twitterWorker = new Worker(
     twitterWorkerHandler,
     { 
         connection: redisConnection,
-        concurrency: process.env.WORKER_CONCURRENCY ? parseInt(process.env.WORKER_CONCURRENCY) : 5
+        concurrency: process.env.WORKER_CONCURRENCY ? parseInt(process.env.WORKER_CONCURRENCY) : 150
     }
 );
 

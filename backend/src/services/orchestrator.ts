@@ -144,39 +144,19 @@ async function handleSupportAutomation(account: any) {
 
         // 60% chance to react if a post exists
         if (latestMainPost && latestMainPost.postUrl && roll < 0.60) {
-            const reactionRoll = Math.random();
             const username = account.username;
-
-            if (reactionRoll < 0.15) {
-                console.log(`❤️ Orchestrator: Support ${username} -> Liking ${latestMainPost.postUrl}`);
-                await twitterQueue.add(`support-like-${username}-${Date.now()}`, {
-                    accountId: account.id,
-                    action: 'autoLike',
-                    username,
-                    config: { url: latestMainPost.postUrl }
-                }, { attempts: 3, backoff: { type: 'exponential', delay: 15000 } });
-            } else if (reactionRoll < 0.30) {
-                console.log(`🔁 Orchestrator: Support ${username} -> Retweeting ${latestMainPost.postUrl}`);
-                await twitterQueue.add(`support-retweet-${username}-${Date.now()}`, {
-                    accountId: account.id,
-                    action: 'autoRetweet',
-                    username,
-                    config: { url: latestMainPost.postUrl }
-                }, { attempts: 3, backoff: { type: 'exponential', delay: 15000 } });
-            } else { // Always comment for remaining support accounts
-                const commentCount = Math.floor(Math.random() * 3) + 2; // 2 to 4 comments
-                console.log(`💬 Orchestrator: Support ${username} -> Commenting ${commentCount} times on ${latestMainPost.postUrl}`);
-                await twitterQueue.add(`support-comment-${username}-${Date.now()}`, {
-                    accountId: account.id,
-                    action: 'autoComment',
-                    username,
-                    config: { 
-                        url: latestMainPost.postUrl,
-                        comments: [ "🔥", "🚀", "Totalement incroyable !", "Je valide !" ],
-                        count: commentCount 
-                    }
-                }, { attempts: 3, backoff: { type: 'exponential', delay: 15000 } });
-            }
+            const commentCount = Math.floor(Math.random() * 3) + 2; // 2 to 4 comments
+            console.log(`💬 Orchestrator: Support ${username} -> Commenting ${commentCount} times on ${latestMainPost.postUrl}`);
+            await twitterQueue.add(`support-comment-${username}-${Date.now()}`, {
+                accountId: account.id,
+                action: 'autoComment',
+                username,
+                config: { 
+                    url: latestMainPost.postUrl,
+                    comments: [ "🔥", "🚀", "Totalement incroyable !", "Je valide !" ],
+                    count: commentCount 
+                }
+            }, { attempts: 3, backoff: { type: 'exponential', delay: 15000 } });
         } 
         // No fallback for SUPPORT accounts to avoid background noise
     } catch (error) {

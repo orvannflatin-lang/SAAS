@@ -2323,6 +2323,17 @@ async function doCommunityPost(page: Page, emitLog: (msg: string) => void, confi
         // Ignore intermittent popups continuously
         await dismissPopups(page, emitLog);
 
+        // Emergency intercept for the "Are you sure you want to leave" popup (triggered by race conditions where "Joined" was clicked twice)
+        const leavePopup = page.getByRole('dialog').filter({ hasText: /leave|quitter/i });
+        if (await leavePopup.first().isVisible({ timeout: 1500 }).catch(() => false)) {
+            emitLog("⚠️ Dialog de départ de communauté détecté (clic accidentel cause race-condition). Annulation...");
+            const cancelBtn = leavePopup.locator('button').filter({ hasText: /Cancel|Annuler/i }).first();
+            if (await cancelBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+                await humanClick(page, cancelBtn);
+                await sleep(1500);
+            }
+        }
+
         // 3. Compose Post using FAB or main compose button
         let composed = false;
         const textAreaSelector = '[data-testid="tweetTextarea_0"]';
