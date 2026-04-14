@@ -2269,6 +2269,183 @@ async function ensureJoinCommunityIfNeeded(
     }
 }
 
+// ─── Custom Community Post ────────────────────────────────────────────────────
+
+async function doCommunityPost(page: Page, emitLog: (msg: string) => void, config: any, username: string) {
+    emitLog("📝 Community-Post : Navigation directe vers la communauté...");
+    if (!config?.communityUrl) {
+        throw new Error("Missing communityUrl for postCommunity");
+    }
+
+    try {
+        await page.goto(config.communityUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+        await sleep(randomRange(3000, 5000));
+        await dismissCommunityLoadOverlays(page, emitLog);
+
+        // Click join if available
+        const joinBtn = page.locator([
+            'button:has-text("Join")',
+            'button:has-text("Rejoindre")',
+            'button:has-text("Request to join")',
+            'button:has-text("Demander")'
+        ].join(', ')).first();
+
+        if (await joinBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+            emitLog("ℹ️ Non membre de la communauté. Adhésion en cours...");
+            await humanClick(page, joinBtn);
+            await sleep(randomRange(3000, 5000));
+            // Ensure popups like Rules or Welcome are cleared
+            for (let i = 0; i < 3; i++) {
+                await dismissCommunityRulesModal(page, emitLog);
+                await dismissCommunitiesWelcomeModal(page, emitLog);
+                await dismissPopups(page, emitLog);
+                await sleep(1500);
+            }
+        } else {
+            emitLog("✅ Déjà membre (ou bouton Join invisible). On continue.");
+        }
+
+        // Ignore intermittent popups continuously
+        await dismissPopups(page, emitLog);
+
+        // Try to find the compose text area or the new tweet button
+        let composed = false;
+        const textAreaSelector = '[data-testid="tweetTextarea_0"]';
+        const inlineTextArea = page.locator(textAreaSelector).first();
+        
+        if (await inlineTextArea.isVisible({ timeout: 4000 }).catch(() => false)) {
+            emitLog("✅ Zone de composition inline trouvée.");
+            composed = true;
+        } else {
+            // Click Post/Tweet button
+            const postButtonSelectors = [
+                'a[data-testid="SideNav_NewTweet_Button"]',
+                'a[href*="/compose/post"]',
+                'button:has-text("Post")'
+            ];
+            
+            for (const selector of postButtonSelectors) {
+                const btn = page.locator(selector).first();
+                if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                    emitLog("🔘 Clic sur le bouton de post...");
+                    await humanClick(page, btn);
+                    await sleep(3000);
+                    if (await page.locator(textAreaSelector).first().isVisible({ timeout: 4000 }).catch(() => false)) {
+                        composed = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!composed) {
+            emitLog("⚠️ Zone de saisie introuvable. Tentative de raccourci clavier...");
+            await page.keyboard.press('n');
+            await sleep(3000);
+            if (await page.locator(textAreaSelector).first().isVisible({ timeout: 4000 }).catch(() => false)) {
+                composed = true;
+                emitLog("✅ Zone de composition ouverte avec le raccourci clavier.");
+            }
+        }
+
+        if (!composed) {
+            emitLog("❌ Impossible d'ouvrir la fenêtre de composition dans la communauté.");
+            throw new Error("Could not find compose textarea for community post");
+        }
+
+        await dismissChooseAudienceSheet(page, emitLog, { communityUrl: config.communityUrl });
+        await sleep(randomRange(1000, 2000));
+
+        let tweetContent = config?.content || AUTO_TWEETS[randomRange(0, AUTO_TWEETS.length - 1)];
+        const SPIN_EMOJIS = ['✨', '🔥', '💫', '🌙', '💎', '🌸', '⚡', '🎯', '💖', '🚀', '👑', '🌟'];
+        const spinEmoji = SPIN_EMOJIS[Math.floor(Math.random() * SPIN_EMOJIS.length)];
+        tweetContent = tweetContent.trimEnd() + ' ' + spinEmoji;
+
+        if (config?.onlyfansUrl) tweetContent += `\n\n${config.onlyfansUrl}`;
+        else if (config?.link) tweetContent += `\n\n${config.link}`;
+
+        if (config?.hashtags && config.hashtags.length > 0) {
+            const randomHashtags = config.hashtags.sort(() => 0.5 - Math.random()).slice(0, randomRange(2, 4));
+            tweetContent += `\n${randomHashtags.join(' ')}`;
+        }
+
+        emitLog(`✍️ Saisie du post de communauté...`);
+        await humanType(page, textAreaSelector, tweetContent);
+        await sleep(randomRange(1500, 2500));
+
+        if (config?.mediaUrls && config.mediaUrls.length > 0) {
+            emitLog(`📸 Traitement de ${config.mediaUrls.length} média...`);
+            const downloadedPaths: string[] = [];
+            try {
+                for (const url of config.mediaUrls.slice(0, 4)) {
+                    const filePath = await downloadImage(url, 'post');
+                    if (filePath) downloadedPaths.push(filePath);
+                }
+                if (downloadedPaths.length > 0) {
+                    const fileInput = page.locator('input[data-testid="fileInput"]').first();
+                    await fileInput.setInputFiles(downloadedPaths).catch(e => emitLog(`⚠️ Erreur média: ${e.message}`));
+                    await sleep(3000);
+                }
+            } catch (err: any) {
+                emitLog(`⚠️ Erreur lors du traitement média: ${err.message}`);
+            }
+        }
+
+        await dismissChooseAudienceSheet(page, emitLog, { communityUrl: config.communityUrl });
+        
+        const tweetBtn = page.locator('[data-testid="tweetButton"]').first();
+        if (await tweetBtn.count() > 0 && await tweetBtn.isEnabled().catch(() => false)) {
+            emitLog("🚀 Publication du post communautaire...");
+            await humanClick(page, tweetBtn);
+            await sleep(randomRange(4000, 6000));
+            emitLog("✅ Post publié en communauté avec succès!");
+
+            // Capture URL
+            let postUrl: string | null = null;
+            try {
+                await page.goto(`https://x.com/${username}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await sleep(3000);
+                const firstTweetTimestamp = page.locator('article[data-testid="tweet"] time').first();
+                const firstTweetLink = page.locator('article[data-testid="tweet"] a[href*="/status/"]').first();
+                
+                if (await firstTweetLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+                    await firstTweetTimestamp.click().catch(async () => { await firstTweetLink.click(); });
+                    await page.waitForURL('**x.com/**/status/**', { timeout: 15000 }).catch(() => {});
+                    await sleep(1500);
+                    postUrl = page.url();
+                    if (postUrl.includes('/status/')) emitLog(`✅ URL récupérée: ${postUrl}`);
+                }
+            } catch (e: any) {
+                emitLog(`⚠️ Impossible de récupérer l'URL du post: ${e.message.split('\n')[0]}`);
+            }
+
+            if (postUrl) {
+                try {
+                    const account = await prisma.twitterAccount.findUnique({ where: { username } });
+                    if (account) {
+                        await prisma.twitterPost.create({
+                            data: {
+                                accountId: account.id,
+                                content: tweetContent,
+                                postUrl: postUrl,
+                                status: 'PUBLISHED',
+                                publishedAt: new Date(),
+                                scheduleDate: new Date(),
+                            },
+                        });
+                    }
+                } catch (dbErr: any) {}
+            }
+            return { success: true, postUrl };
+        } else {
+            throw new Error("Bouton tweet introuvable ou inactif");
+        }
+    } catch (e: any) {
+        emitLog(`❌ Erreur postCommunity: ${e.message}`);
+        throw e;
+    }
+}
+
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 
 export const twitterWorkerHandler = async (job: any) => {
@@ -2456,8 +2633,7 @@ export const twitterWorkerHandler = async (job: any) => {
                 await doAutoComment(page, emitLog, { ...config, count: config?.count || 5 });
                 break;
             case 'postCommunity':
-                await ensureJoinCommunityIfNeeded(page, emitLog, config?.communityUrl);
-                const communityPostResult = await doAutoPost(page, emitLog, config, username);
+                const communityPostResult = await doCommunityPost(page, emitLog, config, username);
                 if (communityPostResult?.postUrl) job.data.postUrl = communityPostResult.postUrl;
                 break;
             case 'updateProfile':

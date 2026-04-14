@@ -14,7 +14,6 @@ dotenv.config();
 
 console.log("🚀 WORKER PROCESS STARTED - ATTEMPTING TO INITIALIZE...");
 
-// Catch unhandled errors
 process.on('uncaughtException', (err) => {
     console.error('🔥 CRITICAL ERROR (Uncaught Exception):', err);
 });
@@ -22,6 +21,23 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason, promise) => {
     console.error('🔥 CRITICAL ERROR (Unhandled Rejection):', reason);
 });
+
+// Graceful shutdown behavior
+const gracefulShutdown = async (signal: string) => {
+    console.log(`\n🔴 Received ${signal}, starting graceful shutdown...`);
+    try {
+        if (typeof twitterWorker !== 'undefined') {
+            await twitterWorker.close();
+        }
+        process.exit(0);
+    } catch (e) {
+        console.error('Error during shutdown:', e);
+        process.exit(1);
+    }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 const logFile = path.join(process.cwd(), 'worker_debug.log');
 const debugLog = (msg: string) => {
@@ -247,7 +263,7 @@ const twitterWorker = new Worker(
     twitterWorkerHandler,
     { 
         connection: redisConnection,
-        concurrency: 20
+        concurrency: process.env.WORKER_CONCURRENCY ? parseInt(process.env.WORKER_CONCURRENCY) : 20
     }
 );
 
