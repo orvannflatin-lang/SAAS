@@ -2296,21 +2296,25 @@ async function doCommunityPost(page: Page, emitLog: (msg: string) => void, confi
             
             // Navigate to User's Communities page to pick a joined one
             await page.goto('https://x.com/i/communities', { waitUntil: 'domcontentloaded', timeout: 35000 });
-            await sleep(randomRange(4000, 6000));
+            await sleep(3000); // Give React time to initialize
+            
+            emitLog("⏳ Chargement de l'onglet Communities...");
+            // Wait for community list to populate
+            await page.waitForSelector('a[href*="/i/communities/1"]', { timeout: 15000 }).catch(() => {});
             await dismissPopups(page, emitLog);
 
-            // Find joined communities links
-            const communityLinks = page.locator('a[href^="/i/communities/"]');
+            // Find joined communities links (making sure it has an ID)
+            const communityLinks = page.locator('a[href*="/i/communities/1"]');
             const count = await communityLinks.count();
             if (count > 0) {
-                // Click a random joined community (skip the first few if possible to avoid generic ones, but we'll just pick randomly from visible)
+                // Click a random joined community
                 const randomIndex = Math.floor(Math.random() * count);
                 const fallbackLink = communityLinks.nth(randomIndex);
                 await humanClick(page, fallbackLink);
                 emitLog(`✅ Fallback vers une autre communauté réussi.`);
                 await sleep(randomRange(3000, 5000));
             } else {
-                emitLog("❌ Aucune autre communauté rejointe trouvée dans l'onglet Communities.");
+                emitLog("❌ Aucune autre communauté rejointe trouvée dans l'onglet Communities. Impossible de poster.");
                 throw new Error("Suspended community and no fallback available.");
             }
         }
