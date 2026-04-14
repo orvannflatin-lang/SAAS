@@ -185,7 +185,7 @@ const worker = new Worker(
             } catch (e: any) {
                 // If it's a "Target closed" error, just stop the interval
                 if (e.message.includes('closed')) {
-                    clearInterval(screenshotInterval);
+                    if (screenshotInterval) clearInterval(screenshotInterval);
                 } else {
                     debugLog(`⚠️ Screenshot fail for ${username}: ${e.message}`);
                 }
