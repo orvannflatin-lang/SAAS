@@ -16,7 +16,7 @@ const twitterQueue = new Queue('twitter-actions', { connection: redisConnection 
 let isOrchestratorRunning = false;
 
 export const executeGlobalCycle = async () => {
-    console.log('🤖 Orchestrator: Starting global autonomous cycle...');
+    console.log('🤖 Orchestrator: Starting global autonomous cycle (v2.1 - STRICT_POSTING)...');
     try {
         const campaigns = await prisma.campaign.findMany({
             where: { isActive: true }
