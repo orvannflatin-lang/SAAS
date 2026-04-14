@@ -2289,69 +2289,116 @@ async function doCommunityPost(page: Page, emitLog: (msg: string) => void, confi
         await sleep(randomRange(3000, 5000));
         await dismissCommunityLoadOverlays(page, emitLog);
 
-        // Click join if available
-        const joinBtn = page.locator([
+        // 1. Detect "Community suspended"
+        const suspendedLocator = page.locator('span:text-is("Community suspended")').first();
+        if (await suspendedLocator.isVisible({ timeout: 3000 }).catch(() => false)) {
+            emitLog("⚠️ Communauté suspendue! Recherche d'une autre communauté déjà rejointe...");
+            
+            // Navigate to User's Communities page to pick a joined one
+            await page.goto('https://x.com/i/communities', { waitUntil: 'domcontentloaded', timeout: 35000 });
+            await sleep(randomRange(4000, 6000));
+            await dismissPopups(page, emitLog);
+
+            // Find joined communities links
+            const communityLinks = page.locator('a[href^="/i/communities/"]');
+            const count = await communityLinks.count();
+            if (count > 0) {
+                // Click a random joined community (skip the first few if possible to avoid generic ones, but we'll just pick randomly from visible)
+                const randomIndex = Math.floor(Math.random() * count);
+                const fallbackLink = communityLinks.nth(randomIndex);
+                await humanClick(page, fallbackLink);
+                emitLog(`✅ Fallback vers une autre communauté réussi.`);
+                await sleep(randomRange(3000, 5000));
+            } else {
+                emitLog("❌ Aucune autre communauté rejointe trouvée dans l'onglet Communities.");
+                throw new Error("Suspended community and no fallback available.");
+            }
+        }
+
+        const joinBtnSelectors = [
             'button:has-text("Join")',
             'button:has-text("Rejoindre")',
             'button:has-text("Request to join")',
             'button:has-text("Demander")'
-        ].join(', ')).first();
+        ].join(', ');
+        
+        const joinedBtnSelectors = [
+            'button:has-text("Joined")',
+            'button:has-text("Rejoint")'
+        ].join(', ');
 
+        const joinBtn = page.locator(joinBtnSelectors).first();
+        const joinedBtn = page.locator(joinedBtnSelectors).first();
+
+        // 2. Handle Join vs Joined explicitly
         if (await joinBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-            emitLog("ℹ️ Non membre de la communauté. Adhésion en cours...");
+            emitLog("ℹ️ Non membre de la communauté (Bouton Join détecté). Demande d'adhésion...");
             await humanClick(page, joinBtn);
             await sleep(randomRange(3000, 5000));
+            
             // Ensure popups like Rules or Welcome are cleared
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < 4; i++) {
                 await dismissCommunityRulesModal(page, emitLog);
                 await dismissCommunitiesWelcomeModal(page, emitLog);
                 await dismissPopups(page, emitLog);
                 await sleep(1500);
             }
+
+            // Verify it switched to Joined
+            if (await joinedBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                emitLog("✅ Adhésion confirmée (Bouton passé à Joined) !");
+            } else {
+                emitLog("⚠️ Impossible de confirmer le statut Joined après le clic sur Join, on continue prudemment.");
+            }
+            
+        } else if (await joinedBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+            emitLog("✅ Déjà membre de la communauté (Bouton Joined visible). On continue.");
         } else {
-            emitLog("✅ Déjà membre (ou bouton Join invisible). On continue.");
+            emitLog("ℹ️ Ni Join ni Joined visible. Interface potentiellement différente ou chargement inachevé.");
         }
 
         // Ignore intermittent popups continuously
         await dismissPopups(page, emitLog);
 
-        // Try to find the compose text area or the new tweet button
+        // 3. Compose Post using FAB or main compose button
         let composed = false;
         const textAreaSelector = '[data-testid="tweetTextarea_0"]';
-        const inlineTextArea = page.locator(textAreaSelector).first();
         
-        if (await inlineTextArea.isVisible({ timeout: 4000 }).catch(() => false)) {
-            emitLog("✅ Zone de composition inline trouvée.");
-            composed = true;
-        } else {
-            // Click Post/Tweet button
-            const postButtonSelectors = [
-                'a[data-testid="SideNav_NewTweet_Button"]',
-                'a[href*="/compose/post"]',
-                'button:has-text("Post")'
-            ];
-            
-            for (const selector of postButtonSelectors) {
-                const btn = page.locator(selector).first();
-                if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
-                    emitLog("🔘 Clic sur le bouton de post...");
-                    await humanClick(page, btn);
-                    await sleep(3000);
-                    if (await page.locator(textAreaSelector).first().isVisible({ timeout: 4000 }).catch(() => false)) {
-                        composed = true;
-                        break;
-                    }
+        // Use the native floating action button to compose posts
+        const postButtonSelectors = [
+            'a[href="/compose/post"]',
+            'a[data-testid="SideNav_NewTweet_Button"]',
+            'button[data-testid="SideNav_NewTweet_Button"]'
+        ];
+        
+        emitLog("🔘 Recherche du bouton de post flottant (FAB)...");
+        for (const selector of postButtonSelectors) {
+            const btn = page.locator(selector).first();
+            if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                emitLog("🔘 Clic sur le bouton de post (FAB)...");
+                await humanClick(page, btn);
+                await sleep(3000);
+                if (await page.locator(textAreaSelector).first().isVisible({ timeout: 4000 }).catch(() => false)) {
+                    composed = true;
+                    break;
                 }
             }
         }
 
         if (!composed) {
-            emitLog("⚠️ Zone de saisie introuvable. Tentative de raccourci clavier...");
-            await page.keyboard.press('n');
-            await sleep(3000);
-            if (await page.locator(textAreaSelector).first().isVisible({ timeout: 4000 }).catch(() => false)) {
+            emitLog("⚠️ Bouton flottant introuvable. Tentative avec l'input inline...");
+            const inlineTextArea = page.locator(textAreaSelector).first();
+            if (await inlineTextArea.isVisible({ timeout: 4000 }).catch(() => false)) {
+                emitLog("✅ Zone de composition inline trouvée.");
                 composed = true;
-                emitLog("✅ Zone de composition ouverte avec le raccourci clavier.");
+            } else {
+                emitLog("⚠️ Zone de saisie introuvable. Tentative de raccourci clavier...");
+                await page.keyboard.press('n');
+                await sleep(3000);
+                if (await page.locator(textAreaSelector).first().isVisible({ timeout: 4000 }).catch(() => false)) {
+                    composed = true;
+                    emitLog("✅ Zone de composition ouverte avec le raccourci clavier.");
+                }
             }
         }
 
