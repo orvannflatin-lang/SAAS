@@ -372,7 +372,19 @@ async function createStealthSession(
     });
     
     // Use existing fingerprint if provided, otherwise use newly generated one
-    const fingerprint = existingFingerprint || fpResult.fingerprint;
+    // Safety: check if existingFingerprint is the full result or just the sub-object
+    let fingerprintResult = fpResult;
+    if (existingFingerprint) {
+        if (existingFingerprint.fingerprint) {
+            fingerprintResult = existingFingerprint;
+        } else {
+            // It's the sub-object, wrap it back to satisfy the library
+            fingerprintResult = { 
+                fingerprint: existingFingerprint,
+                headers: fpResult.headers
+            } as any;
+        }
+    }
 
     const deviceInfo = existingDeviceInfo || {
         userAgent: ua,
@@ -444,12 +456,12 @@ async function createStealthSession(
         });
 
         // Inject fingerprint + stealth scripts
-        await fpInj.attachFingerprintToPlaywright(context, fingerprint as any);
+        await fpInj.attachFingerprintToPlaywright(context, fingerprintResult as any);
         await applyStealthScripts(context, deviceInfo);
 
         const page = await context.newPage();
 
-        return { browser, context, page, deviceInfo, fingerprint };
+        return { browser, context, page, deviceInfo, fingerprint: fingerprintResult };
     } catch (err: any) {
         emitLog(`❌ Failed to initialize browser context/page: ${err.message}`);
         await browser.close();
