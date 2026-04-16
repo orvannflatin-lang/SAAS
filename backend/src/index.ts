@@ -1567,9 +1567,9 @@ io.on('connection', (socket) => {
         if (Math.random() > 0.9) console.log(`[Worker Screenshot] from ${data.username}`);
         io.emit('ui_screenshot', data);
     });
-    socket.on('ui_input', (data) => {
-        console.log(`[UI Input] forwarding to worker for ${data.username}`);
-        io.emit('worker_input', data);
+    socket.on('worker_state', (data) => {
+        console.log(`[Worker State Update]`, data);
+        io.emit('ui_state', data);
     });
     
     // Handle notification events

@@ -3,7 +3,7 @@ import IORedis from 'ioredis';
 import { twitterWorkerHandler } from './twitter';
 import { chromium } from 'playwright-extra';
 import stealth from 'puppeteer-extra-plugin-stealth';
-import { PrismaClient } from '@prisma/client';
+import prisma from './utils/prisma';
 import { io } from 'socket.io-client';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -51,7 +51,7 @@ const debugLog = (msg: string) => {
 };
 
 const HEADLESS = process.env.HEADLESS !== 'false'; // Default to true unless explicitly false
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient(); // Handled by singleton import
 const socket = io(process.env.BACKEND_SOCKET_URL || 'http://saas-backend:4000', {
     transports: ['websocket'],
     reconnectionAttempts: 10,
@@ -232,7 +232,7 @@ const twitterWorker = new Worker(
     twitterWorkerHandler,
     { 
         connection: redisConnection,
-        concurrency: process.env.WORKER_CONCURRENCY ? parseInt(process.env.WORKER_CONCURRENCY) : 10
+        concurrency: process.env.WORKER_CONCURRENCY ? parseInt(process.env.WORKER_CONCURRENCY) : 3
     }
 );
 

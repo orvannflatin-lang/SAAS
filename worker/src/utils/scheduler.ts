@@ -1,8 +1,7 @@
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from './prisma';
+// const prisma = new PrismaClient(); // Handled by singleton import
 
 class TwitterScheduler {
     private redisConnection: IORedis;

@@ -4,7 +4,7 @@ import type { Page, BrowserContext, Browser } from 'playwright';
 import stealth from 'puppeteer-extra-plugin-stealth';
 import { FingerprintGenerator } from 'fingerprint-generator';
 import { FingerprintInjector } from 'fingerprint-injector';
-import { PrismaClient } from '@prisma/client';
+import prisma from './utils/prisma';
 import { io } from 'socket.io-client';
 import { sessionManager, SessionData } from './utils/session-manager';
 import fs from 'fs';
@@ -24,7 +24,7 @@ const debugLog = (msg: string) => {
     console.log(msg);
 };
 
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient(); // Handled by singleton import
 const socket = io(process.env.BACKEND_SOCKET_URL || 'http://saas-backend:4000', {
     transports: ['websocket'],
     reconnectionAttempts: 10,
@@ -352,8 +352,7 @@ async function createStealthSession(
     proxyConfig: any,
     emitLog: (msg: string) => void,
     existingDeviceInfo?: any,
-    existingFingerprint?: any,
-    forceHeadless?: boolean
+    existingFingerprint?: any
 ): Promise<BrowserSession> {
     const fpGen = new FingerprintGenerator();
     const fpInj = new FingerprintInjector();
@@ -384,63 +383,78 @@ async function createStealthSession(
 
     // Launch browser with stealth args
     emitLog("🚀 Initialisation de la session furtive...");
+    const isHeadless = true; 
+    emitLog(`DEBUG: isHeadless forced to ${isHeadless} (Env HEADLESS was: ${process.env.HEADLESS})`);
     
-    // Check if we are in an environment that supports headless: false
-    // Most cloud providers (Railway) require true.
-    const isHeadless = forceHeadless !== undefined 
-        ? forceHeadless 
-        : (process.env.HEADLESS === 'false' ? false : true);
+    // 3. RETRY LOGIC for Browser Launch (handle EAGAIN / spawn failures)
+    let browser: Browser | null = null;
+    let launchRetries = 0;
+    while (launchRetries < 3) {
+        try {
+            browser = await chromium.launch({
+                headless: isHeadless,
+                proxy: proxyConfig,
+                args: [
+                    '--headless=new', // Explicit headless flag
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-notifications',
+                    '--disable-blink-features=AutomationControlled',
+                    '--disable-infobars',
+                    '--ignore-certificate-errors',
+                    '--disable-web-security',
+                    '--font-render-hinting=none',
+                    '--no-first-run',
+                    '--no-service-autorun',
+                    '--password-store=basic',
+                    '--disable-extensions',
+                    `--window-size=${vp.width},${vp.height}`,
+                ],
+                ignoreDefaultArgs: ['--enable-automation'],
+                timeout: 60000,
+            });
+            if (browser) break;
+        } catch (e: any) {
+            launchRetries++;
+            if (launchRetries >= 3) throw e;
+            emitLog(`⚠️ Échec lancement navigateur (${launchRetries}/3): ${e.message}. Nouvel essai...`);
+            await sleep(3000 * launchRetries);
+        }
+    }
 
-    emitLog(`DEBUG: isHeadless set to ${isHeadless} (Env HEADLESS was: ${process.env.HEADLESS}, forceHeadless: ${forceHeadless})`);
-    
-    const browser = await chromium.launch({
-        headless: isHeadless,
-        proxy: proxyConfig,
-        args: [
-            '--headless=new', // Explicit headless flag
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-notifications',
-            '--disable-blink-features=AutomationControlled',
-            '--disable-infobars',
-            '--ignore-certificate-errors',
-            '--disable-web-security',
-            '--font-render-hinting=none',
-            '--no-first-run',
-            '--no-service-autorun',
-            '--password-store=basic',
-            '--disable-extensions',
-            `--window-size=${vp.width},${vp.height}`,
-        ],
-        ignoreDefaultArgs: ['--enable-automation'],
-        timeout: 60000,
-    });
+    if (!browser) throw new Error("Impossible de démarrer le navigateur après plusieurs tentatives.");
     emitLog("✅ Navigateur démarré. Configuration du contexte...");
 
-    const context = await browser.newContext({
-        userAgent: deviceInfo.userAgent,
-        viewport: deviceInfo.viewport,
-        deviceScaleFactor: deviceInfo.deviceScaleFactor,
-        isMobile: true,
-        hasTouch: true,
-        colorScheme: Math.random() > 0.5 ? 'dark' : 'light',
-        locale: 'en-US',
-        timezoneId: tz,
-        extraHTTPHeaders: {
-            'Accept-Language': 'en-US,en;q=0.9',
-            'sec-ch-ua-mobile': '?1',
-            'sec-ch-ua-platform': isIOS ? '"iOS"' : '"Android"',
-        },
-    });
+    try {
+        const context = await browser.newContext({
+            userAgent: deviceInfo.userAgent,
+            viewport: deviceInfo.viewport,
+            deviceScaleFactor: deviceInfo.deviceScaleFactor,
+            isMobile: true,
+            hasTouch: true,
+            colorScheme: Math.random() > 0.5 ? 'dark' : 'light',
+            locale: 'en-US',
+            timezoneId: tz,
+            extraHTTPHeaders: {
+                'Accept-Language': 'en-US,en;q=0.9',
+                'sec-ch-ua-mobile': '?1',
+                'sec-ch-ua-platform': isIOS ? '"iOS"' : '"Android"',
+            },
+        });
 
-    // Inject fingerprint + stealth scripts
-    await fpInj.attachFingerprintToPlaywright(context, fpResult);
-    await applyStealthScripts(context, deviceInfo);
+        // Inject fingerprint + stealth scripts
+        await fpInj.attachFingerprintToPlaywright(context, fingerprint as any);
+        await applyStealthScripts(context, deviceInfo);
 
-    const page = await context.newPage();
+        const page = await context.newPage();
 
-    return { browser, context, page, deviceInfo, fingerprint };
+        return { browser, context, page, deviceInfo, fingerprint };
+    } catch (err: any) {
+        emitLog(`❌ Failed to initialize browser context/page: ${err.message}`);
+        await browser.close();
+        throw err;
+    }
 }
 
 // ─── Login Flow ───────────────────────────────────────────────────────────────
@@ -2493,12 +2507,32 @@ async function doCommunityPost(page: Page, emitLog: (msg: string) => void, confi
 export const twitterWorkerHandler = async (job: any) => {
     const { accountId, action, config } = job.data;
 
-    const account = await prisma.twitterAccount.findUnique({
-        where: { id: accountId },
-        include: { proxy: true },
-    });
+    // 1. ADD JITTER to prevent thundering herd (EAGAIN / pthread_create errors)
+    // We wait between 0 and 8 seconds to spread out browser launches
+    const jitter = randomRange(0, 8000);
+    debugLog(`[Job ${job.id}] Applying jitter: ${jitter}ms...`);
+    await sleep(jitter);
 
-    if (!account) throw new Error('Twitter Account not found');
+    // 2. RETRY LOGIC for DB (handle transient Railway postgres errors)
+    let account = null;
+    let retries = 0;
+    while (retries < 3) {
+        try {
+            account = await prisma.twitterAccount.findUnique({
+                where: { id: accountId },
+                include: { proxy: true },
+            });
+            if (account) break;
+            throw new Error('Account not found');
+        } catch (e: any) {
+            retries++;
+            if (retries >= 3) throw e;
+            debugLog(`[Job ${job.id}] DB Retry ${retries}/3: ${e.message}`);
+            await sleep(2000 * retries);
+        }
+    }
+
+    if (!account) throw new Error('Twitter Account not found (after retries)');
 
     const username = account.username;
     const emitLog = (msg: string) => {
@@ -2527,34 +2561,9 @@ export const twitterWorkerHandler = async (job: any) => {
     }
 
     emitLog("🔍 Création du profil de périphérique mobile indétectable...");
-    
-    // For manualLogin, try to open a visible window if the environment allows it
-    const shouldForceVisible = action === 'manualLogin';
-    const isHeadless = shouldForceVisible ? false : undefined;
-
-    const session = await createStealthSession(proxyConfig, emitLog, existingDeviceInfo, existingFingerprint, isHeadless);
+    const session = await createStealthSession(proxyConfig, emitLog, existingDeviceInfo, existingFingerprint);
     const { browser, context, page, deviceInfo, fingerprint } = session;
     emitLog("✅ Session furtive créée.");
-
-    // Remote Control Listener
-    const inputHandler = async (data: any) => {
-        if (data.username !== username) return;
-        try {
-            if (data.type === 'click') {
-                emitLog(`🖱️ Clic à (${data.x}, ${data.y})`);
-                await page.mouse.click(data.x, data.y);
-            } else if (data.type === 'type') {
-                emitLog(`⌨️ Saisie de texte : ${data.text}`);
-                await page.keyboard.type(data.text);
-            } else if (data.type === 'key') {
-                emitLog(`⌨️ Touche pressée : ${data.key}`);
-                await page.keyboard.press(data.key);
-            }
-        } catch (e: any) {
-            emitLog(`⚠️ Erreur Remote Control: ${e.message}`);
-        }
-    };
-    socket.on('worker_input', inputHandler);
 
     // Screenshot interval for dashboard
     const screenshotInterval = setInterval(async () => {
@@ -2709,10 +2718,6 @@ export const twitterWorkerHandler = async (job: any) => {
                     profileImage: config?.profileImage || account.profileImage,
                     bannerImage: config?.bannerImage || account.bannerImage,
                 });
-                break;
-            case 'manualLogin':
-                const manualLoginResult = await doManualLogin(page, context, account, emitLog);
-                if (!manualLoginResult) throw new Error("Échec de la connexion manuelle");
                 break;
             default:
                 emitLog(`⚠️ Action inconnue : ${action}`);

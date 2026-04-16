@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from './prisma';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient(); // Handled by singleton import
 
 export interface SessionData {
     cookies: any[];
