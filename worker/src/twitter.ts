@@ -352,7 +352,8 @@ async function createStealthSession(
     proxyConfig: any,
     emitLog: (msg: string) => void,
     existingDeviceInfo?: any,
-    existingFingerprint?: any
+    existingFingerprint?: any,
+    forceHeadless?: boolean
 ): Promise<BrowserSession> {
     const fpGen = new FingerprintGenerator();
     const fpInj = new FingerprintInjector();
@@ -383,8 +384,14 @@ async function createStealthSession(
 
     // Launch browser with stealth args
     emitLog("🚀 Initialisation de la session furtive...");
-    const isHeadless = true; 
-    emitLog(`DEBUG: isHeadless forced to ${isHeadless} (Env HEADLESS was: ${process.env.HEADLESS})`);
+    
+    // Check if we are in an environment that supports headless: false
+    // Most cloud providers (Railway) require true.
+    const isHeadless = forceHeadless !== undefined 
+        ? forceHeadless 
+        : (process.env.HEADLESS === 'false' ? false : true);
+
+    emitLog(`DEBUG: isHeadless set to ${isHeadless} (Env HEADLESS was: ${process.env.HEADLESS}, forceHeadless: ${forceHeadless})`);
     
     const browser = await chromium.launch({
         headless: isHeadless,
@@ -2520,9 +2527,34 @@ export const twitterWorkerHandler = async (job: any) => {
     }
 
     emitLog("🔍 Création du profil de périphérique mobile indétectable...");
-    const session = await createStealthSession(proxyConfig, emitLog, existingDeviceInfo, existingFingerprint);
+    
+    // For manualLogin, try to open a visible window if the environment allows it
+    const shouldForceVisible = action === 'manualLogin';
+    const isHeadless = shouldForceVisible ? false : undefined;
+
+    const session = await createStealthSession(proxyConfig, emitLog, existingDeviceInfo, existingFingerprint, isHeadless);
     const { browser, context, page, deviceInfo, fingerprint } = session;
     emitLog("✅ Session furtive créée.");
+
+    // Remote Control Listener
+    const inputHandler = async (data: any) => {
+        if (data.username !== username) return;
+        try {
+            if (data.type === 'click') {
+                emitLog(`🖱️ Clic à (${data.x}, ${data.y})`);
+                await page.mouse.click(data.x, data.y);
+            } else if (data.type === 'type') {
+                emitLog(`⌨️ Saisie de texte : ${data.text}`);
+                await page.keyboard.type(data.text);
+            } else if (data.type === 'key') {
+                emitLog(`⌨️ Touche pressée : ${data.key}`);
+                await page.keyboard.press(data.key);
+            }
+        } catch (e: any) {
+            emitLog(`⚠️ Erreur Remote Control: ${e.message}`);
+        }
+    };
+    socket.on('worker_input', inputHandler);
 
     // Screenshot interval for dashboard
     const screenshotInterval = setInterval(async () => {
@@ -2677,6 +2709,10 @@ export const twitterWorkerHandler = async (job: any) => {
                     profileImage: config?.profileImage || account.profileImage,
                     bannerImage: config?.bannerImage || account.bannerImage,
                 });
+                break;
+            case 'manualLogin':
+                const manualLoginResult = await doManualLogin(page, context, account, emitLog);
+                if (!manualLoginResult) throw new Error("Échec de la connexion manuelle");
                 break;
             default:
                 emitLog(`⚠️ Action inconnue : ${action}`);

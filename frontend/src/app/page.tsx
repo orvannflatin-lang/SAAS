@@ -58,7 +58,9 @@ import {
     Link as LinkIcon,
     Image as ImageIcon,
     Loader2,
-    Wrench
+    Wrench,
+    MousePointer2,
+    Keyboard
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import NewFeatures from '../components/NewFeatures';
@@ -453,12 +455,15 @@ export default function Dashboard() {
         fetchAccounts(platform);
     }, [platform]);
 
+    const socketRef = useState<any>(null); // Actually using state to trigger re-renders if needed, or ref
+
     useEffect(() => {
         const socket = io(SOCKET_URL, {
             transports: ['websocket'],
             reconnectionAttempts: 5,
             timeout: 10000
         });
+        (window as any).socket = socket;
         
         socket.on('ui_log', (data) => setLogs((prev) => [
             {...data, timestamp: new Date()}, 
@@ -485,6 +490,38 @@ export default function Dashboard() {
             clearInterval(interval);
         };
     }, [platform, showAddModal]);
+
+    const sendInput = (type: string, payload: any) => {
+        const socket = (window as any).socket;
+        if (!socket || !activeAccount) return;
+        socket.emit('ui_input', {
+            username: activeAccount,
+            type,
+            ...payload
+        });
+    };
+
+    const handleScreencastClick = (e: React.MouseEvent<HTMLImageElement>) => {
+        const img = e.currentTarget;
+        const rect = img.getBoundingClientRect();
+        
+        // Mobile viewport is fixed at 390x844 in our worker
+        const viewportWidth = 390;
+        const viewportHeight = 844;
+        
+        // Calculate relative coordinates
+        const x = Math.round(((e.clientX - rect.left) / rect.width) * viewportWidth);
+        const y = Math.round(((e.clientY - rect.top) / rect.height) * viewportHeight);
+        
+        sendInput('click', { x, y });
+    };
+
+    const [remoteText, setRemoteText] = useState('');
+    const handleSendText = () => {
+        if (!remoteText) return;
+        sendInput('type', { text: remoteText });
+        setRemoteText('');
+    };
 
     const fetchPosts = async (accountId: string) => {
         if (!token) return;
@@ -1172,7 +1209,8 @@ export default function Dashboard() {
                                                 <img 
                                                     src={screenshots[activeAccount]} 
                                                     alt={`Live screenshot of @${activeAccount}`}
-                                                    className="w-full h-full object-contain" 
+                                                    className="w-full h-full object-contain cursor-crosshair" 
+                                                    onClick={handleScreencastClick}
                                                     onError={(e) => {
                                                         const target = e.target as HTMLImageElement;
                                                         target.style.display = 'none';
@@ -1194,6 +1232,38 @@ export default function Dashboard() {
                                             </div>
                                         )}
                                         <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl pointer-events-none" />
+                                        
+                                        {/* Remote Control Tools Overlay */}
+                                        <div className="absolute bottom-4 right-4 flex gap-2">
+                                            <div className="flex bg-black/60 backdrop-blur-md rounded-xl border border-white/10 p-1">
+                                                <input 
+                                                    type="text" 
+                                                    value={remoteText}
+                                                    onChange={(e) => setRemoteText(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSendText()}
+                                                    placeholder="Type here..."
+                                                    className="bg-transparent border-none outline-none px-3 py-1 text-xs text-white placeholder:text-white/30 w-32"
+                                                />
+                                                <button 
+                                                    onClick={handleSendText}
+                                                    className="p-1.5 hover:bg-white/10 rounded-lg text-violet-400 transition-colors"
+                                                >
+                                                    <Send size={14} />
+                                                </button>
+                                            </div>
+                                            <button 
+                                                onClick={() => sendInput('key', { key: 'Enter' })}
+                                                className="px-3 py-1 bg-black/60 backdrop-blur-md hover:bg-white/10 rounded-xl border border-white/10 text-[10px] font-bold text-white/70 transition-colors"
+                                            >
+                                                ENTER
+                                            </button>
+                                            <button 
+                                                onClick={() => sendInput('key', { key: 'Backspace' })}
+                                                className="px-3 py-1 bg-black/60 backdrop-blur-md hover:bg-white/10 rounded-xl border border-white/10 text-[10px] font-bold text-white/70 transition-colors"
+                                            >
+                                                DEL
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1368,6 +1438,7 @@ export default function Dashboard() {
                                                 {platform === 'TWITTER' && <th className="px-6 py-4">Role</th>}
                                                 <th className="px-6 py-4">Current Status</th>
                                                 <th className="px-6 py-4 text-right">Network Route</th>
+                                                <th className="px-6 py-4 text-right">Login</th>
                                                 <th className="px-6 py-4 text-right">Actions</th>
                                             </tr>
                                         </thead>
@@ -1416,6 +1487,15 @@ export default function Dashboard() {
                                                                         <WifiOff size={14} /> Local Network
                                                                     </div>
                                                                 )}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-right">
+                                                                <button 
+                                                                    onClick={() => launchAction(acc.id, 'manualLogin')}
+                                                                    className={`p-2 rounded-lg transition-all border flex items-center gap-2 text-xs font-bold ml-auto ${acc.status === 'RUNNING' ? 'bg-violet-600 border-violet-400 text-white animate-pulse' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white hover:text-black hover:border-white'}`}
+                                                                    title="Manual Login (Remote Control)"
+                                                                >
+                                                                    <MousePointer2 size={14} /> {acc.status === 'RUNNING' ? 'ACTIVE' : 'MANUAL LOGIN'}
+                                                                </button>
                                                             </td>
                                                             <td className="px-6 py-4 text-right">
                                                                 <button 
@@ -3261,6 +3341,14 @@ function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index,
                             title="Run Action"
                         >
                             <Play size={16} fill="currentColor" />
+                        </button>
+                        
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); launchAction(account.id, 'manualLogin'); }} 
+                            className={`p-2.5 rounded-xl transition-all shadow-sm shrink-0 flex items-center gap-1 border ${account.status === 'RUNNING' ? 'bg-violet-600 border-violet-400 text-white' : 'bg-white/5 text-white/60 border-white/5 hover:bg-blue-500/20 hover:text-blue-400 hover:border-blue-500/30'}`}
+                            title="Manual Login"
+                        >
+                            <MousePointer2 size={16} />
                         </button>
                         
                         <AnimatePresence mode="wait">
