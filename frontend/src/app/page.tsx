@@ -3344,7 +3344,7 @@ function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index,
                         </button>
                         
                         <button 
-                            onClick={(e) => { e.stopPropagation(); launchAction(account.id, 'manualLogin'); }} 
+                            onClick={(e) => { e.stopPropagation(); onLaunch('manualLogin'); }} 
                             className={`p-2.5 rounded-xl transition-all shadow-sm shrink-0 flex items-center gap-1 border ${account.status === 'RUNNING' ? 'bg-violet-600 border-violet-400 text-white' : 'bg-white/5 text-white/60 border-white/5 hover:bg-blue-500/20 hover:text-blue-400 hover:border-blue-500/30'}`}
                             title="Manual Login"
                         >
